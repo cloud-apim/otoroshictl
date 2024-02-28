@@ -7,7 +7,7 @@ on:
         description: "Version number"
 env:
   CARGO_TERM_COLOR: always
-  
+
 jobs:
   build_and_push_cli:
     name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
@@ -20,6 +20,10 @@ jobs:
             os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
             bin: otoroshictl-linux-amd64
+          - os_name: Linux-aarch64
+            os: ubuntu-20.04
+            target: aarch64-unknown-linux-gnu
+            bin: otoroshictl-linux-arm64
           - os_name: Windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
