@@ -1,0 +1,93 @@
+apiVersion: proxy.otoroshi.io/v1
+kind: Sidecar
+metadata:
+  name: my-sidecar
+spec:
+  kubernetes: false
+  dns_integration: true
+  dns_port: null
+  dns_ns: null
+  dns_domain: .otoroshi.mesh
+  dns_ttl: null
+  otoroshi:
+    context_name: null
+    location:
+      hostname: otoroshi-api.otoroshi.mesh
+      ip_addresses:
+      - 127.0.0.1
+      - 127.0.0.1
+      kubernetes:
+        service: otoroshi-service
+        namespace: otoroshi
+      port: 8443
+      tls: true
+    credentials:
+      client_id: xxxx
+      client_secret: xxxx
+    client_cert:
+      cert_location: /tmp/cert.pem
+      cert_value: |
+        ---- BEGIN CERTIFICATE -----
+        xxxxxxxxxxxxxxxxxxx
+        ---- END CERTIFICATE ----
+      key_location: /tmp/cert.pem
+      key_value: |
+        ---- BEGIN PRIVATE KEY -----
+        xxxxxxxxxxxxxxxxxxx
+        ---- END PRIVATE KEY ----
+      ca_location: null
+      ca_value: null
+  inbound:
+    port: 15000
+    target_port: 8443
+    target_hostname: api-a.foo.bar
+    tls:
+      enabled: true
+      cert_id: xxxx
+    mtls:
+      enabled: true
+      ca_cert_id: xxxx
+    otoroshi_protocol:
+      enabled: true
+      route_id: xxxx
+      secret: xxxxx
+      algo: HS256
+      version: V2
+      header_in_name: xxxx
+      header_out_name: xxxx
+  outbounds:
+    port: 8080
+    service-b.otoroshi.mesh:
+      hostname: service-b.otoroshi.mesh
+      path: /.*
+      apikey:
+        enabled: true
+        apikey_id: xxxx
+      mtls:
+        enabled: true
+        client_cert_id: xxxx
+      otoroshi_protocol:
+        enabled: true
+        route_id: xxxx
+        secret: xxxxx
+        algo: HS256
+        version: V2
+        header_in_name: xxxx
+        header_out_name: xxxx
+    service-a.otoroshi.mesh:
+      hostname: service-a.otoroshi.mesh
+      path: /api/.*
+      apikey:
+        enabled: true
+        apikey_id: xxxx
+      mtls:
+        enabled: true
+        client_cert_id: xxxx
+      otoroshi_protocol:
+        enabled: true
+        route_id: xxxx
+        secret: xxxxx
+        algo: HS256
+        version: V2
+        header_in_name: xxxx
+        header_out_name: xxxx

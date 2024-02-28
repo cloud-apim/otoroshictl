@@ -1,0 +1,102 @@
+apiVersion: proxy.otoroshi.io/v1
+kind: Sidecar
+metadata:
+  name: my-sidecar
+spec:
+  # optional
+  kubernetes: false
+  # catch DNS request to route *.otoroshi.mesh to otoroshi, can be disabled in kubernetes if coredns is configured
+  dns_integration: true
+  # optional the mesh domain to catch
+  dns_domain: .otoroshi.mesh
+  # how to talk to the local otoroshi cluster
+  otoroshi:
+    # location can be omitted in kubernetes
+    location:
+      hostname: otoroshi-api.otoroshi.mesh 
+      ip_addresses:
+      - "127.0.0.1"
+      - "127.0.0.1"
+      kubernetes:
+        service: otoroshi-service
+        namespace: otoroshi
+      port: 8443
+      tls: true
+    credentials:
+      # we must support file path here or ENV.name
+      client_id: xxxx
+      client_secret: xxxx
+    client_cert:
+      # optional
+      cert_location: /tmp/cert.pem
+      # optional
+      cert_value: |
+        ---- BEGIN CERTIFICATE -----
+        xxxxxxxxxxxxxxxxxxx
+        ---- END CERTIFICATE ----
+      # optional
+      key_location: /tmp/cert.pem
+      # optional
+      key_value: |
+        ---- BEGIN PRIVATE KEY -----
+        xxxxxxxxxxxxxxxxxxx
+        ---- END PRIVATE KEY ----
+  # how we expose the local app
+  inbound:
+    port: 15000
+    # optional
+    target_port: 8443
+    # optional
+    target_hostname: api-a.foo.bar
+    tls: 
+      enabled: true
+      # optional otoroshi certificate id
+      cert_id: xxxx
+    mtls:
+      enabled: true
+      # optional otoroshi ca certificate id
+      ca_cert_id: xxxx
+    otoroshi_protocol:
+      enabled: true
+      # optional otoroshi route id to get config if symmetrical
+      route_id: xxxx
+      # optional
+      secret: xxxxx
+      # optional
+      algo: HS256
+      # optional
+      version: V2
+      # optional
+      header_in_name: xxxx
+      # optional
+      header_out_name: xxxx
+  # what we want to call from the local app and how
+  outbounds:
+    # optional internal proxy port
+    port: 8080
+    service-a.otoroshi.mesh:
+      # can be omitted if same as key
+      hostname: service-a.otoroshi.mesh
+      # optional
+      path: /api/.*
+      apikey: 
+        enabled: true
+        # optional otoroshi apikey entity id
+        apikey_id: xxxx
+      mtls: 
+        enabled: true
+        # optional otoroshi certificate id
+        client_cert_id: xxxx
+    service-b.otoroshi.mesh:
+      # can be omitted if same as key
+      hostname: service-b.otoroshi.mesh
+      # optional
+      path: /.*
+      apikey: 
+        enabled: true
+        # optional otoroshi apikey entity id
+        apikey_id: xxxx
+      mtls: 
+        enabled: true
+        # optional otoroshi certificate id
+        client_cert_id: xxxx

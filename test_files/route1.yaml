@@ -1,0 +1,242 @@
+---
+apiVersion: "proxy.otoroshi.io/v1"
+kind: "Route"
+metadata:
+  name: "route_1"
+spec:
+  _loc:
+    tenant: "default"
+    teams:
+    - "default"
+  id: "route_1"
+  name: "route_1"
+  description: "route_1"
+  tags: []
+  metadata: {}
+  enabled: true
+  debug_flow: false
+  export_reporting: false
+  capture: false
+  groups:
+  - "default"
+  frontend:
+    domains:
+    - "worker-route.oto.tools"
+    strip_path: true
+    exact: false
+    headers: {}
+    query: {}
+    methods: []
+  backend:
+    targets:
+    - id: "target_1"
+      hostname: "mirror.otoroshi.io"
+      port: 443
+      tls: true
+      weight: 1
+      predicate:
+        type: "AlwaysMatch"
+      protocol: "HTTP/1.1"
+      ip_address: null
+      tls_config:
+        certs: []
+        trusted_certs: []
+        enabled: false
+        loose: false
+        trust_all: false
+    root: "/"
+    rewrite: false
+    load_balancing:
+      type: "RoundRobin"
+    client:
+      retries: 1
+      max_errors: 20
+      retry_initial_delay: 50
+      backoff_factor: 2
+      call_timeout: 30000
+      call_and_stream_timeout: 120000
+      connection_timeout: 10000
+      idle_timeout: 60000
+      global_timeout: 30000
+      sample_interval: 2000
+      proxy: {}
+      custom_timeouts: []
+      cache_connection_settings:
+        enabled: false
+        queue_size: 2048
+    health_check:
+      enabled: false
+      url: ""
+      timeout: 5000
+      healthyStatuses: []
+      unhealthyStatuses: []
+  backend_ref: null
+  plugins:
+  - enabled: true
+    debug: false
+    plugin: "cp:otoroshi.next.plugins.OverrideHost"
+    include: []
+    exclude: []
+    config: {}
+    plugin_index:
+      transform_request: 0
+  - enabled: true
+    debug: false
+    plugin: "cp:otoroshi.next.plugins.ApikeyCalls"
+    include: []
+    exclude: []
+    config:
+      extractors:
+        basic:
+          enabled: true
+          header_name: null
+          query_name: null
+        custom_headers:
+          enabled: true
+          client_id_header_name: null
+          client_secret_header_name: null
+        client_id:
+          enabled: true
+          header_name: null
+          query_name: null
+        jwt:
+          enabled: true
+          secret_signed: true
+          keypair_signed: true
+          include_request_attrs: false
+          max_jwt_lifespan_sec: null
+          header_name: null
+          query_name: null
+          cookie_name: null
+      routing:
+        enabled: false
+      validate: true
+      mandatory: true
+      pass_with_user: false
+      wipe_backend_request: true
+      update_quotas: true
+    plugin_index:
+      validate_access: 0
+      transform_request: 1
+      match_route: 0
+---
+apiVersion: "proxy.otoroshi.io/v1"
+kind: "Route"
+metadata:
+  name: "route_2"
+spec:
+  _loc:
+    tenant: "default"
+    teams:
+    - "default"
+  id: "route_2"
+  name: "route_2"
+  description: "route_2"
+  tags: []
+  metadata: {}
+  enabled: true
+  debug_flow: false
+  export_reporting: false
+  capture: false
+  groups:
+  - "default"
+  frontend:
+    domains:
+    - "worker-route.oto.tools"
+    strip_path: true
+    exact: false
+    headers: {}
+    query: {}
+    methods: []
+  backend:
+    targets:
+    - id: "target_1"
+      hostname: "mirror.otoroshi.io"
+      port: 443
+      tls: true
+      weight: 1
+      predicate:
+        type: "AlwaysMatch"
+      protocol: "HTTP/1.1"
+      ip_address: null
+      tls_config:
+        certs: []
+        trusted_certs: []
+        enabled: false
+        loose: false
+        trust_all: false
+    root: "/"
+    rewrite: false
+    load_balancing:
+      type: "RoundRobin"
+    client:
+      retries: 1
+      max_errors: 20
+      retry_initial_delay: 50
+      backoff_factor: 2
+      call_timeout: 30000
+      call_and_stream_timeout: 120000
+      connection_timeout: 10000
+      idle_timeout: 60000
+      global_timeout: 30000
+      sample_interval: 2000
+      proxy: {}
+      custom_timeouts: []
+      cache_connection_settings:
+        enabled: false
+        queue_size: 2048
+    health_check:
+      enabled: false
+      url: ""
+      timeout: 5000
+      healthyStatuses: []
+      unhealthyStatuses: []
+  backend_ref: null
+  plugins:
+  - enabled: true
+    debug: false
+    plugin: "cp:otoroshi.next.plugins.OverrideHost"
+    include: []
+    exclude: []
+    config: {}
+    plugin_index:
+      transform_request: 0
+  - enabled: true
+    debug: false
+    plugin: "cp:otoroshi.next.plugins.ApikeyCalls"
+    include: []
+    exclude: []
+    config:
+      extractors:
+        basic:
+          enabled: true
+          header_name: null
+          query_name: null
+        custom_headers:
+          enabled: true
+          client_id_header_name: null
+          client_secret_header_name: null
+        client_id:
+          enabled: true
+          header_name: null
+          query_name: null
+        jwt:
+          enabled: true
+          secret_signed: true
+          keypair_signed: true
+          include_request_attrs: false
+          max_jwt_lifespan_sec: null
+          header_name: null
+          query_name: null
+          cookie_name: null
+      routing:
+        enabled: false
+      validate: true
+      mandatory: true
+      pass_with_user: false
+      wipe_backend_request: true
+      update_quotas: true
+    plugin_index:
+      validate_access: 0
+      transform_request: 1
+      match_route: 0
