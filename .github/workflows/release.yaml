@@ -5,35 +5,70 @@ on:
     inputs:
       version:
         description: "Version number"
-
+env:
+  CARGO_TERM_COLOR: always
+  
 jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
+  build_and_push_cli:
+    name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os_name: Linux-x86_64
+            os: ubuntu-20.04
+            target: x86_64-unknown-linux-gnu
+            bin: otoroshictl-linux-amd64
+          - os_name: Windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: otoroshictl-amd64.exe
+          - os_name: macOS-x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            bin: otoroshictl-darwin-amd64
+          - os_name: macOS-aarch64
+            os: macOS-latest
+            target: aarch64-apple-darwin
+            bin: otoroshictl-darwin-arm64
+        toolchain:
+          - stable
     steps:
-      - uses: actions/checkout@v3
-      - name: setup jdk11
-        uses: actions/setup-java@v1
+      - uses: actions/checkout@v4
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v0
         with:
-          java-version: 11
-      - uses: coursier/cache-action@v5
-      - name: change version
-        run: |
-          echo 'ThisBuild / version := "${{ inputs.version }}"' > version.sbt
-      - name: build-libs
-        id: build-libs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          sbt ';compile;package;assembly'
-          rm ./target/scala-2.12/otoroshictl_2.12-${{ inputs.version }}.jar 
-          mv ./target/scala-2.12/otoroshictl-assembly_2.12-dev.jar ./target/scala-2.12/otoroshictl_2.12-${{ inputs.version }}.jar
+          command: "build"
+          working-directory: "."
+          target: ${{ matrix.platform.target }}
+          toolchain: ${{ matrix.toolchain }}
+          args: "--release"
+          strip: true
+      - name: Rename binary (linux and macos)
+        run: mv ./target/${{ matrix.platform.target }}/release/otoroshictl ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
+        if: matrix.platform.os_name != 'Windows-x86_64'
+      - name: Rename binary (windows)
+        run: mv ./target/${{ matrix.platform.target }}/release/otoroshictl.exe ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
+        if: matrix.platform.os_name == 'Windows-x86_64'
       - name: Generate SHA-256
-        run: |
-          shasum -a 256 ./target/scala-2.12/otoroshictl_2.12-${{ inputs.version }}.jar | cut -d ' ' -f 1 > ./target/scala-2.12/otoroshictl_2.12-${{ inputs.version }}.jar.sha256
+        run: shasum -a 256 ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} | cut -d ' ' -f 1 > ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
       - name: Release binary and SHA-256 checksum to GitHub
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ inputs.version }}
           files: |
-            ./target/scala-2.12/otoroshictl_2.12-${{ inputs.version }}.jar
-            ./target/scala-2.12/otoroshictl_2.12-${{ inputs.version }}.jar.sha256
+            ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
+            ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
+  
+#  cratesio:
+#      runs-on: ubuntu-latest
+#      defaults:
+#        run:
+#          working-directory: .
+#      steps:
+#      - uses: actions/checkout@v4
+#      - name: Build
+#        run: cargo build --verbose --release
+#      - name: Publish to crates.io
+#        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
