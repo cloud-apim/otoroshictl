@@ -16,6 +16,7 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className="hero__subtitle">{siteConfig.tagline}</p>
+        <img src={require('@site/static/img/otoroshictl-logo.png').default} style={{ width: 250 }} />
         <div className={styles.buttons}>
           <a
             className="button button--secondary button--lg"
