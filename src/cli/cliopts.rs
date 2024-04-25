@@ -287,6 +287,8 @@ pub enum ResourcesSubCommand {
         /// The file cxontaining the json object to merge
         #[arg(short, long, value_name = "FILE or URL")]
         file: Option<String>,
+        #[arg(long, value_name = "inline path=value tuples")]
+        data: Vec<String>,
     },
     /// Update otoroshi resources
     Edit {
@@ -297,6 +299,10 @@ pub enum ResourcesSubCommand {
         /// The file to sync
         #[arg(short, long, value_name = "FILE or URL")]
         file: Option<String>,
+        #[arg(long, value_name = "inline path=value tuples")]
+        data: Vec<String>,
+        #[arg(long, value_name = "inline document")]
+        input: Option<String>,
     },
     /// Create otoroshi resources
     Create {
@@ -305,6 +311,10 @@ pub enum ResourcesSubCommand {
         /// The file to sync
         #[arg(short, long, value_name = "FILE or URL")]
         file: Option<String>,
+        #[arg(long, value_name = "inline path=value tuples")]
+        data: Vec<String>,
+        #[arg(long, value_name = "inline document")]
+        input: Option<String>,
     },
     /// Synchronise otoroshi resources from files or directories
     Apply {

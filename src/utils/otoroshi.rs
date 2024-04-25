@@ -257,6 +257,22 @@ impl Otoroshi {
         }
     }
 
+    pub async fn upsert_one_resource_with_content_type(entity: String, id: String, body: String, content_type: String, opts: CliOpts) -> bool {
+        let config: OtoroshiConnectionConfig = Self::get_connection_config(opts).await;
+        match Self::otoroshi_call(Method::POST, format!("/apis/any/v1/{}/{}", entity, id).as_str(), None, Some(hyper::Body::from(body)), Some(content_type), config).await {
+            resp if resp.status == 200 || resp.status == 201 => true,
+            _ => false
+        }
+    }
+
+    pub async fn create_one_resource_with_content_type(entity: String,body: String, content_type: String, opts: CliOpts) -> bool {
+        let config: OtoroshiConnectionConfig = Self::get_connection_config(opts).await;
+        match Self::otoroshi_call(Method::POST, format!("/apis/any/v1/{}", entity).as_str(), None, Some(hyper::Body::from(body)), Some(content_type), config).await {
+            resp if resp.status == 200 || resp.status == 201 => true,
+            _ => false
+        }
+    }
+
     pub async fn get_resource_template(entity: String, opts: CliOpts) -> Option<serde_json::Value> {
         let config: OtoroshiConnectionConfig = Self::get_connection_config(opts).await;
         match Self::otoroshi_call(Method::GET, format!("/apis/any/v1/{}/_template", entity).as_str(), None, None, Some("application/json".to_string()), config).await {
