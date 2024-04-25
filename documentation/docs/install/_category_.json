@@ -1,0 +1,8 @@
+{
+  "label": "Installation",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "How to install otoroshictl in less than 5 minutes."
+  }
+}

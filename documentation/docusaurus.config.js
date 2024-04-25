@@ -68,11 +68,6 @@ const config = {
             label: 'Documentation',
           },
           {
-            href: 'https://blog.cloud-apim.com',
-            label: 'Blog', 
-            position: 'right'
-          },
-          {
             href: 'https://github.com/cloud-apim/otoroshictl',
             label: 'GitHub',
             position: 'right',
@@ -81,6 +76,11 @@ const config = {
             label: 'Cloud APIM',
             href: 'https://www.cloud-apim.com',
             position: 'right',
+          },
+          {
+            href: 'https://blog.cloud-apim.com',
+            label: 'Cloud APIM Blog', 
+            position: 'right'
           },
         ],
       },
@@ -92,7 +92,7 @@ const config = {
             items: [
               {
                 label: 'Documentation',
-                to: '/docs/intro',
+                to: '/docs/overview',
               },
             ],
           },

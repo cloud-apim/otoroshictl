@@ -328,7 +328,7 @@ impl OtoroshiCtlConfig {
                 OtoroshiCtlConfigSpecCluster {
                     name: "default".to_string(),
                     hostname: "otoroshi-api.oto.tools".to_string(),
-                    port: 9999,
+                    port: 8080,
                     tls: false,
                     ip_addresses: None,
                     client_cert: None,

@@ -287,8 +287,12 @@ pub enum ResourcesSubCommand {
         /// The file cxontaining the json object to merge
         #[arg(short, long, value_name = "FILE or URL")]
         file: Option<String>,
-        #[arg(long, value_name = "inline path=value tuples")]
+        /// Use inline PATH=VALUE tuples as entity input
+        #[arg(long, value_name = "PATH=VALUE")]
         data: Vec<String>,
+        /// Use stdin as entity input
+        #[clap(long, action, default_value = "false")]
+        stdin: bool,
     },
     /// Update otoroshi resources
     Edit {
@@ -299,10 +303,14 @@ pub enum ResourcesSubCommand {
         /// The file to sync
         #[arg(short, long, value_name = "FILE or URL")]
         file: Option<String>,
-        #[arg(long, value_name = "inline path=value tuples")]
+        /// Use inline PATH=VALUE tuples as entity input
+        #[arg(long, value_name = "PATH=VALUE")]
         data: Vec<String>,
-        #[arg(long, value_name = "inline document")]
+        /// The optional inline entity input 
         input: Option<String>,
+        /// Use stdin as entity input
+        #[clap(long, action, default_value = "false")]
+        stdin: bool,
     },
     /// Create otoroshi resources
     Create {
@@ -311,10 +319,14 @@ pub enum ResourcesSubCommand {
         /// The file to sync
         #[arg(short, long, value_name = "FILE or URL")]
         file: Option<String>,
-        #[arg(long, value_name = "inline path=value tuples")]
+        /// Use inline PATH=VALUE tuples as entity input
+        #[arg(long, value_name = "PATH=VALUE")]
         data: Vec<String>,
-        #[arg(long, value_name = "inline document")]
+        /// The optional inline entity input 
         input: Option<String>,
+        /// Use stdin as entity input
+        #[clap(long, action, default_value = "false")]
+        stdin: bool,
     },
     /// Synchronise otoroshi resources from files or directories
     Apply {

@@ -846,7 +846,7 @@ spec:
                     }
                 }
             },
-            ResourcesSubCommand::Create { resource, file, data, input } => {
+            ResourcesSubCommand::Create { resource, file, data, input, stdin } => {
                 let final_resource_name: String = if resource.ends_with("s") {
                     resource.to_string()
                 } else {
@@ -883,7 +883,11 @@ spec:
                         if data.is_empty() {
                             if input.is_none() {
                                 let to_edit = "".to_string();
-                                let edited = edit::edit(to_edit.to_string()).unwrap_or(to_edit.to_string());
+                                let edited = if *stdin {
+                                    std::io::read_to_string(std::io::stdin()).unwrap()
+                                } else {
+                                    edit::edit(to_edit.to_string()).unwrap_or(to_edit.to_string())
+                                };
                                 let is_yaml = !edited.trim().starts_with("{");
                                 if is_yaml {
                                     let mut json = serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
@@ -940,7 +944,7 @@ spec:
                     }
                 }
             }, 
-            ResourcesSubCommand::Edit { resource, id, file, data, input } => {
+            ResourcesSubCommand::Edit { resource, id, file, data, input, stdin } => {
                 let final_resource_name: String = if resource.ends_with("s") {
                     resource.to_string()
                 } else {
@@ -979,7 +983,11 @@ spec:
                                 if data.is_empty() {
                                     if input.is_none() {
                                         let to_edit = serde_json::to_string_pretty(&res.body).unwrap();
-                                        let edited = edit::edit(to_edit.to_string()).unwrap_or(to_edit.to_string());
+                                        let edited = if *stdin {
+                                            std::io::read_to_string(std::io::stdin()).unwrap()
+                                        } else {
+                                            edit::edit(to_edit.to_string()).unwrap_or(to_edit.to_string())
+                                        };
                                         let is_yaml = !edited.trim().starts_with("{");
                                         if is_yaml {
                                             let mut json = serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
@@ -1032,7 +1040,7 @@ spec:
                     }
                 }
             }, 
-            ResourcesSubCommand::Patch { resource, id, merge, file, data } => {
+            ResourcesSubCommand::Patch { resource, id, merge, file, data, stdin } => {
                 // TODO: handle json patch
                 let final_resource_name: String = if resource.ends_with("s") {
                     resource.to_string()
@@ -1047,9 +1055,15 @@ spec:
                     Some(res) => {
                         if data.is_empty() {
                             let content: String = match file {
-                                None => match merge {
-                                    None => edit::edit("".to_string()).unwrap_or("".to_string()),
-                                    Some(merge) => merge.to_string()
+                                None => {
+                                    if *stdin {
+                                        std::io::read_to_string(std::io::stdin()).unwrap()
+                                    } else {
+                                        match merge {
+                                            None => edit::edit("".to_string()).unwrap_or("".to_string()),
+                                            Some(merge) => merge.to_string()
+                                        }
+                                    }
                                 },
                                 Some(file) => crate::utils::file::FileHelper::get_content_string(file).await
                             };
