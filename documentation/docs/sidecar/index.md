@@ -2,11 +2,11 @@
 sidebar_position: 1
 ---
 
-# Mesh sidecar
+# The mesh sidecar
 
 This page is still being written. Please be patient :)
 
-otoroshictl sidecar allow to create a service mesh that can work inside and/or outside a kubernetes cluster
+`otoroshictl` sidecar allow to create a service mesh that can work inside and/or outside a kubernetes cluster
 
 ```bash
 $ otoroshictl sidecar -h

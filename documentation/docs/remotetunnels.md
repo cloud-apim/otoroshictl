@@ -1,0 +1,75 @@
+---
+sidebar_position: 6
+---
+
+# Remote tunnels client
+
+`otoroshictl` is capable of talking with the otoroshi remote tunnel protocol as described [here in the official otoroshi documentation](https://maif.github.io/otoroshi/manual/topics/tunnels.html).
+
+The idea here is to create a bidirectionnal tunnel between `otoroshictl` and an otoroshi instance in order to make this otoroshi instance capable of exposing service only accessible to `otoroshictl`.
+
+
+## Make a local service available through remote tunnel
+
+here we are going to make the process listening on port 3000 on localhost available to the current otoroshi cluster. This process will be available through tunnel `process1`
+
+```bash
+$ otoroshictl remote-tunnel --local-port 3000 --tunnel process1
+```
+
+we can also make distance services available as well
+
+```bash
+$ otoroshictl remote-tunnel --local-port 3000 --local-host 192.168.1.42 --tunnel process1
+```
+
+## Expose a local service available through remote tunnel
+
+here we are going to make the process listening on port 3000 on localhost available to the current otoroshi cluster and automatically expose it through a route. This process will be available through tunnel `process1`. 
+
+```bash
+$ otoroshictl remote-tunnel --local-port 3000 --tunnel process1 --expose
+
+[INFO  otoroshictl::tunnels::remote]
+[INFO  otoroshictl::tunnels::remote] your service will be available at: http://967cdd29-ddd9-4d0a-a894-3b24e50f64c7-tunnel.oto.tools:8080
+[INFO  otoroshictl::tunnels::remote]
+[INFO  otoroshictl::tunnels::remote] connecting the tunnel ...
+[INFO  otoroshictl::tunnels::remote] connection done !
+```
+
+we can also explicitely pass the exposed domain with
+
+```bash
+$ otoroshictl remote-tunnel --local-port 3000 --tunnel process1 --expose --remote-domain foo.bar --remote-subdomain process1
+```
+
+and you'll be able to access your process at `http://process1.foo.bar`
+
+## Command usage
+
+```bash
+$ otoroshictl remote-tunnel -h
+
+Exposes local processes on the current otoroshi cluster through the otoroshi remote tunnel feature
+
+Usage: otoroshictl remote-tunnel [OPTIONS]
+
+Options:
+      --local-host <LOCAL_HOST>
+          the local host forwarded to [default: localhost]
+      --local-port <LOCAL_PORT>
+          the local port forwarded to [default: 8080]
+      --local-tls
+          local process exposed as tls ?
+      --expose
+          enable expose mode
+      --remote-domain <REMOTE_DOMAIN>
+          the exposed domain
+      --remote-subdomain <REMOTE_SUBDOMAIN>
+          the exposed subdomain
+      --tls
+          enable tls want mode
+      --tunnel <TUNNEL>
+          the tunnel id [default: cli]
+  ...
+```

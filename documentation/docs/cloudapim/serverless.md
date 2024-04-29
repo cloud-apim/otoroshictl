@@ -1,7 +1,7 @@
 ---
-sidebar_position: 1
+sidebar_position: 2
 ---
 
-# Otoroshi remote tunnels
+# Serverless projects
 
 This page is still being written. Please be patient :)
