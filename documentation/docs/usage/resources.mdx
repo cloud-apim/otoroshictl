@@ -2,6 +2,9 @@
 sidebar_position: 1
 ---
 
+import Terminal from '@site/src/components/Terminal';
+
+
 # Otoroshi cluster resources
 
 the main goal of `otoroshictl` is to help you manage your otoroshi cluster and its entities
@@ -10,8 +13,9 @@ but first we need to know what entities are manageable
 
 ## List all managed entities
 
-```bash
-$ otoroshictl entities
+<Terminal 
+    command="otoroshictl entities"
+    result={`
 
 +-------------------+--------------------+---------------------+------------------------------------+---------+--------+------------+---------+
 | kind              | singular_name      | plural_name         | group                              | version | served | deprecated | storage |
@@ -62,14 +66,15 @@ $ otoroshictl entities
 +-------------------+--------------------+---------------------+------------------------------------+---------+--------+------------+---------+
 | CorazaConfig      | coraza-config      | coraza-configs      | coraza-waf.extensions.otoroshi.io  | v1      | true   | false      | true    |
 +-------------------+--------------------+---------------------+------------------------------------+---------+--------+------------+---------+
-```
+`} />
 
 now we can start working with the `otoroshictl resources` commands
 
 ## The resources commands
 
-```bash
-$ otoroshictl resources -h
+<Terminal  
+    command="otoroshictl resources -h"
+    result={`
 
 Manage all the resources (entities) of the current otoroshi cluster
 
@@ -88,14 +93,15 @@ Commands:
   export    Export otoroshi resources to files or directories
   import    Import data from an export file
   help      Print this message or the help of the given subcommand(s)
-```
+`} />
 
 ## Get all entities of a kind
 
 you can list any kind of entity, here for instance certificates
 
-```bash
-$ otoroshictl resources get certificates
+<Terminal 
+    command="otoroshictl resources get certificates"
+    result={`
 
 +-----------------------------------------------+----------------------------------------------+--------------------------------------------------+---------+------+----------+
 | id                                            | name                                         | description                                      | enabled | tags | metadata |
@@ -112,7 +118,7 @@ $ otoroshictl resources get certificates
 +-----------------------------------------------+----------------------------------------------+--------------------------------------------------+---------+------+----------+
 | kubernetes-webhooks-cert                      | Kubernetes Webhooks Certificate              | Kubernetes Webhooks Certificate (auto-generated) |         |  0   |    3     |
 +-----------------------------------------------+----------------------------------------------+--------------------------------------------------+---------+------+----------+
-```
+`} />
 
 :::tip
 
@@ -122,8 +128,9 @@ don't forget about the `-o json` or `-o yaml` flag for something more detailed
 
 details of the command
 
-```bash
-$ otoroshictl resources get -h
+<Terminal 
+    command="otoroshictl resources get -h"
+    result={`
 
 Get otoroshi resource from current cluster
 
@@ -149,19 +156,20 @@ Options:
   -f, --filters <FILTERS>
           Filter the returned elements
   ...
-```
+`} />
 
 ## Get one entity of a kind
 
-```bash
-$ otoroshictl resources get certificates otoroshi-client
+<Terminal 
+    command="otoroshictl resources get certificates otoroshi-client"
+    result={`
 
 +-----------------+-------------------------------------+----------------------------------------------+---------+------+----------+
 | id              | name                                | description                                  | enabled | tags | metadata |
 +-----------------+-------------------------------------+----------------------------------------------+---------+------+----------+
 | otoroshi-client | Otoroshi Default Client Certificate | Otoroshi client certificate (auto-generated) |         |  0   |    2     |
 +-----------------+-------------------------------------+----------------------------------------------+---------+------+----------+
-```
+`} />
 
 :::tip
 
@@ -171,8 +179,9 @@ don't forget about the `-o json` or `-o yaml` flag for something more detailed
 
 details of the command
 
-```bash
-$ otoroshictl resources get -h
+<Terminal 
+    command="otoroshictl resources get -h"
+    result={`
 
 Get otoroshi resource from current cluster
 
@@ -198,18 +207,18 @@ Options:
   -f, --filters <FILTERS>
           Filter the returned elements
   ...
-```
+`} />
 
 ## Delete one entity of a kind
 
-```bash
-$ otoroshictl resources delete certificates otoroshi-client
-```
+<Terminal 
+    command="otoroshictl resources delete certificates otoroshi-client" />
 
 details of the command
 
-```bash
-$ otoroshictl resources delete -h
+<Terminal 
+    command="otoroshictl resources delete -h"
+    result={`
 
 Delete otoroshi resources
 
@@ -231,52 +240,41 @@ Options:
   -r, --recursive
           Walk through sub directories
   ...
-```
+`} />
 
 ## Create one entity of a kind
 
 you can create an entity by passing a reference to a file or a url like
 
-```bash
-$ otoroshictl resources create route -f ./route.json
-$ otoroshictl resources create route -f https://www.foo.bar/route.json
-```
+<Terminal command="otoroshictl resources create route -f ./route.json" />
+<Terminal command="otoroshictl resources create route -f https://www.foo.bar/route.json" />
 
 or using stdin
 
-```bash
-$ cat ./route.json | otoroshi resources create route --stdin
-```
+<Terminal command="cat ./route.json | otoroshi resources create route --stdin" />
 
 or using the `--data` flag
 
-```bash
-$ otoroshictl resources create route \
-  --data name=demootoroshictl \
-  --data frontend.domain='demootoroshictl.oto.tools' \
-  --data backend.target_url='https://mirror.otoroshi.io' \
-  --data plugins.0.plugin='cp:otoroshi.next.plugins.ApikeyCalls' \
-  --data plugins.1.plugin='cp:otoroshi.next.plugins.OverrideHost'
-```
+<Terminal command={`otoroshictl resources create route \\
+  --data name=demootoroshictl \\
+  --data frontend.domain='demootoroshictl.oto.tools' \\
+  --data backend.target_url='https://mirror.otoroshi.io' \\
+  --data plugins.0.plugin='cp:otoroshi.next.plugins.ApikeyCalls' \\
+  --data plugins.1.plugin='cp:otoroshi.next.plugins.OverrideHost'`} />
 
 or by inlining entity content
 
-```bash
-$ otoroshictl resources create route '{"kind":"Route", ... }'
-```
+<Terminal command="otoroshictl resources create route '{kind':'Route', ... }'" />
 
 or finaly by using you prefered editor 
 
-```bash
-$ otoroshictl resources create route
-```
+<Terminal command="otoroshictl resources create route" />
 
 that will launch the editor defined in your `EDITOR` env. variable
 
 the details of the command
 
-```bash
-$ otoroshictl resources create -h
+<Terminal command="otoroshictl resources create -h" result={`
 
 Create otoroshi resources
 
@@ -298,7 +296,7 @@ Options:
       --stdin
           Use stdin as entity input
   ...
-```
+`} />
 
 ## Update one entity of a kind
 
@@ -306,46 +304,36 @@ you can update an entity using the `edit` command. You can use it in the followi
 
 using a file or an url
 
-```bash
-$ otoroshictl resources edit route my-route -f ./my-route.json
-$ otoroshictl resources edit route my-route -f https://www.foo.bar/my-route.json
-```
+<Terminal command="otoroshictl resources edit route my-route -f ./my-route.json" />
+<Terminal command="otoroshictl resources edit route my-route -f https://www.foo.bar/my-route.json" />
 
 or using stdin
 
-```bash
-$ cat ./my-route.json | otoroshi resources edit route my-route --stdin
-```
+<Terminal command="cat ./my-route.json | otoroshi resources edit route my-route --stdin" />
 
 or using the `--data` flag
 
-```bash
-$ otoroshictl resources edit route my-route \
-  --data name=my-route \
-  --data frontend.domain='myroute.oto.tools' \
-  --data backend.target_url='https://mirror.otoroshi.io' \
-  --data plugins.0.plugin='cp:otoroshi.next.plugins.ApikeyCalls' \
-  --data plugins.1.plugin='cp:otoroshi.next.plugins.OverrideHost'
-```
+<Terminal command={`otoroshictl resources edit route my-route \\
+  --data name=my-route \\
+  --data frontend.domain='myroute.oto.tools' \\
+  --data backend.target_url='https://mirror.otoroshi.io' \\
+  --data plugins.0.plugin='cp:otoroshi.next.plugins.ApikeyCalls' \\
+  --data plugins.1.plugin='cp:otoroshi.next.plugins.OverrideHost'`} />
 
 or by inlining entity content
 
-```bash
-$ otoroshictl resources edit route my-route '{"kind":"Route", ... }'
-```
+<Terminal command="otoroshictl resources edit route my-route '{'kind':'Route', ... }'" />
 
 or finaly by using you prefered editor 
 
-```bash
-$ otoroshictl resources edit route my-route
-```
+<Terminal command="otoroshictl resources edit route my-route" />
 
 that will launch the editor defined in your `EDITOR` env. variable
 
 the details of the command
 
-```bash
-$ otoroshictl resources edit -h
+<Terminal command="otoroshictl resources edit -h"
+    result={`
 
 Update otoroshi resources
 
@@ -368,7 +356,7 @@ Options:
       --stdin
           Use stdin as entity input
   ...
-```
+`} />
 
 ## Patch one entity of a kind
 
@@ -376,8 +364,9 @@ you can also update on entity using the patch command, in that case, the format 
 
 the details of the command
 
-```bash
-$ otoroshictl resources patch -h
+<Terminal 
+    command="otoroshictl resources patch -h"
+    result={`
 
 Update otoroshi resources through json merge or json patch
 
@@ -400,16 +389,14 @@ Options:
       --stdin
           Use stdin as entity input
   ...
-```
+`} />
 
 ## Entities import
 
 you can import the content of an entire otoroshi cluster from an export file using the `import` command like
 
-```bash
-$ otoroshictl resources import -f ./export.json
-$ otoroshictl resources import -f https://www.foo.bar/export.json
-```
+<Terminal command="otoroshictl resources import -f ./export.json" />
+<Terminal command="otoroshictl resources import -f https://www.foo.bar/export.json" />
 
 :::tip
 
@@ -419,8 +406,8 @@ you can use the `--nd-json` flag if the file contains an nd-json export
 
 the details of the command
 
-```bash
-$ otoroshictl resources import -h
+<Terminal command="otoroshictl resources import -h"
+    result={`
 
 Import data from an export file
 
@@ -432,7 +419,7 @@ Options:
       --nd-json
           import from ndjson format
   ...
-```
+`} />
 
 ## Entities export
 
@@ -440,14 +427,14 @@ you can perform otoroshi exports with the `export` command
 
 you can export everything in one file
 
-```bash
-$ otoroshictl resources export -f export.json
-```
+<Terminal command="otoroshictl resources export -f export.json" />
 
 you can also specify a directory, in that case entities will be exported with one file per kind
 
-```bash
-$ otoroshictl resources export -d export
+<Terminal 
+    command="otoroshictl resources export -d export"
+    result={`
+
 $ ls -l ./export
 
 total 808
@@ -473,12 +460,14 @@ total 808
 -rw-r--r--@ 1 otoroshi  otoroshi     473 26 avr 10:46 teams.json
 -rw-r--r--@ 1 otoroshi  otoroshi     392 26 avr 10:46 tenants.json
 -rw-r--r--@ 1 otoroshi  otoroshi    6086 26 avr 10:46 wasm-plugins.json
-```
+`} />
 
 or ask to split everything in one file per entity
 
-```bash
-$ otoroshictl resources export -d export --split-files
+<Terminal 
+    command="otoroshictl resources export -d export --split-files"
+    result={`
+
 $ ls -l ./export
 
 total 0
@@ -500,18 +489,17 @@ drwxr-xr-x@  4 otoroshi  otoroshi   128 26 avr 10:50 service-groups
 drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 teams
 drwxr-xr-x@  4 otoroshi  otoroshi   128 26 avr 10:50 tenants
 drwxr-xr-x@  6 otoroshi  otoroshi   192 26 avr 10:50 wasm-plugins
-```
+`} />
 
 you can also export in yaml and with kubernetes manifest armoring
 
-```bash
-$ otoroshictl resources export -d export --split-files -o yaml --kube
-```
+<Terminal command="otoroshictl resources export -d export --split-files -o yaml --kube" />
 
 the details of the command
 
-```bash
-$ otoroshictl resources export -h
+<Terminal 
+    command="otoroshictl resources export -h"
+    result={`
 
 Export otoroshi resources to files or directories
 
@@ -530,7 +518,7 @@ Options:
       --nd-json
           Export in ndjson format
   ...
-```
+`} />
 
 ## Entities synchronize any entity
 
@@ -538,27 +526,22 @@ with the `apply` command you will be able to synchronize your otoroshi cluster w
 
 you can use file or urls
 
-```bash
-$ otoroshictl resources apply -f entities.json
-$ otoroshictl resources apply -f https://www.foo.bar/entities.json
-```
+<Terminal command="otoroshictl resources apply -f entities.json" />
+<Terminal command="otoroshictl resources apply -f https://www.foo.bar/entities.json" />
 
 or even a directory
 
-```bash
-$ otoroshictl resources apply -d entities --recursive
-```
+<Terminal command="otoroshictl resources apply -d entities --recursive" />
 
 you can also add a `--watch` flag to keep everything in sync as you edit files
 
-```bash
-$ otoroshictl resources apply -d entities --recursive --watch
-```
+<Terminal command="otoroshictl resources apply -d entities --recursive --watch" />
 
 the details of the command
 
-```bash
-$ otoroshictl resources apply -h
+<Terminal 
+    command="otoroshictl resources apply -h"
+    result={`
 
 Synchronise otoroshi resources from files or directories
 
@@ -576,14 +559,15 @@ Options:
   -w, --watch
           Keep watching file changes
   ...
-```
+`} />
 
 ## Entity templates
 
 you can generate at any moment a template for any kind of entity supported by the current otoroshi cluster
 
-```bash
-$ otoroshictl resources template apikey
+<Terminal  
+    command="otoroshictl resources template apikey"
+    result={`
 
 _loc:
   teams:
@@ -617,14 +601,15 @@ rotation:
 tags: []
 throttlingQuota: 10000000
 validUntil: null
-```
+`} />
 
 ## Kubernetes specific commands
 
 `otoroshictl` can help you generate your `rbac` and `crds` manifests
 
-```bash
-$ otoroshictl resources crds
+<Terminal not_ended 
+    command="otoroshictl resources crds"
+    result={`
 
 ---
 apiVersion: "apiextensions.k8s.io/v1"
@@ -685,10 +670,11 @@ spec:
         x-kubernetes-preserve-unknown-fields: true
         type: "object"
 ...
-```
+`} />
 
-```bash
-$ otoroshictl resources rbac
+<Terminal not_ended 
+    command="otoroshictl resources rbac"
+    result={`
 
 ---
 kind: ServiceAccount
@@ -799,4 +785,4 @@ rules:
         - get
         - list
         - watch
-```
+`} />

@@ -2,19 +2,20 @@
 sidebar_position: 1
 ---
 
+import Terminal from '@site/src/components/Terminal';
+
 # Otoroshi deployments
 
 you can link your [Cloud APIM](https://www.cloud-apim.com) account into your `otoroshictl` config, just do
 
-```bash 
-$ otoroshictl cloud-apim login
-```
+<Terminal command="otoroshictl cloud-apim login" />
 
 it should open a web browser where you can log into your [Cloud APIM](https://www.cloud-apim.com) account. Once logged in, you be able to list your deployments
 
 
-```bash
-$ otoroshictl cloud-apim list
+<Terminal  
+    command="otoroshictl cloud-apim list"
+    result={`
 
 +-----------------------------------------+----------+----------+---------+--------+--------------------+--------------------------+
 | name                                    | kind     | version  | status  | region | plan               | created_at               |
@@ -23,18 +24,19 @@ $ otoroshictl cloud-apim list
 +-----------------------------------------+----------+----------+---------+--------+--------------------+--------------------------+
 | balanced analyzing budgetary management | Otoroshi | v16.16.1 | Running | par    | xxxxxxxxxxxxxxxxxx | 2024-03-07T09:55:59.424Z |
 +-----------------------------------------+----------+----------+---------+--------+--------------------+--------------------------+
-```
+`} />
+
 
 and then link a deployement to your `otoroshictl` config
 
-```bash
-$ otoroshictl cloud-apim link wasi-wasm-demo
-```
+<Terminal command="otoroshictl cloud-apim link wasi-wasm-demo" />
+
 
 ## Cloud APIM subcommands
 
-```bash
-$ otoroshictl cloud-apim -h
+<Terminal 
+    command="otoroshictl cloud-apim -ht"
+    result={`
 
 Manage cloud apim clusters
 
@@ -82,4 +84,4 @@ Options:
           Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
   -h, --help
           Print help
-```
+`} />

@@ -1,29 +1,33 @@
 ---
-sidebar_position: 2
+sidebar_position: 3
 ---
 
-# Otoroshi cluster health
+import Terminal from '@site/src/components/Terminal';
 
-at any moment you can get your cluster health with the command
+# Otoroshi cluster informations
 
-```bash
-$ otoroshictl health
+at any moment you can get your cluster informations with the command
 
-+----------+-----------+---------+------------+--------------+---------+---------+
-| otoroshi | datastore | storage | eventstore | certificates | scripts | cluster |
-+----------+-----------+---------+------------+--------------+---------+---------+
-| healthy  | healthy   | healthy | unknown    | loaded       | loaded  | healthy |
-+----------+-----------+---------+------------+--------------+---------+---------+
-```
+<Terminal 
+    command="otoroshictl infos"
+    result={`
 
-## Health command usage
++---------------------------------------+-------------+-----------+-----+----------------------------+---------------------------+
+| cluster_id                            | version     | datastore | env | java_version               | os                        |
++---------------------------------------+-------------+-----------+-----+----------------------------+---------------------------+
+| 7bcab7ed5-9b9c-430e-acb5-2a42300b102c | 16.17.0-dev | file      | dev | 11.0.22 - Eclipse Adoptium | Mac OS X - 14.1 - aarch64 |
++---------------------------------------+-------------+-----------+-----+----------------------------+---------------------------+
+`} />
 
-```bash
-$ otoroshictl health -h
+## Infos command usage
 
-Display the health status of the current otoroshi cluster
+<Terminal 
+    command="otoroshictl infos -h"
+    result={`
 
-Usage: otoroshictl health [OPTIONS]
+Display the informations about the current otoroshi cluster
+
+Usage: otoroshictl infos [OPTIONS]
 
 Options:
   -v, --verbose
@@ -58,4 +62,4 @@ Options:
           Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
   -h, --help
           Print help
-```
+`} />

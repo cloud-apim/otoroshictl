@@ -2,6 +2,8 @@
 sidebar_position: 1
 ---
 
+import Terminal from '@site/src/components/Terminal';
+
 # Overview
 
 Let's discover **otoroshictl** the command line tool to manage your otoroshi clusters with style.
@@ -9,8 +11,9 @@ Let's discover **otoroshictl** the command line tool to manage your otoroshi clu
 **otoroshictl** let you manage almost any aspect of an otoroshi cluster. You just need to download the binary and your good to go. 
 Please let **otoroshictl** introduce itself :)
 
-```bash
-$ otoroshictl -h
+<Terminal
+    command="otoroshictl -h"
+    result={`
 
 Manage your otoroshi clusters with style. otoroshictl is a CLI that can interact with the admin api of an otoroshi cluster.
 
@@ -69,4 +72,4 @@ Options:
           Print help
   -V, --version
           Print version
-```
+`} />

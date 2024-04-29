@@ -1,6 +1,5 @@
 import React, { Component } from 'react';
 
-
 export default class Terminal extends Component {
 
   state = { copy: false }
@@ -17,6 +16,13 @@ export default class Terminal extends Component {
 
   render() {
     const color = this.state.copy ? 'rgb(40, 167, 69)' : 'white';
+    let value = (this.props.command || '').trim();
+    if (value.startsWith('\n')) {
+      value = value.substring(1);
+    }
+    if (value.startsWith('$ ')) {
+      value = value.substring(2);
+    }
     return (
       <div className="terminal-component" style={{ width: "100%", marginTop: 20 }}>
         <div style={{ maxWidth: "100%", display: 'flex', flexDirection: 'column', borderRadius: 5 }}>
@@ -30,8 +36,8 @@ export default class Terminal extends Component {
             </div>
           </div>
           <pre style={{ display:"block", overflowX: "auto", background:"#002451", color:"white", padding:"1rem 12px 1rem", borderTopLeftRadius: 0,  borderTopRightRadius: 0, borderBottomRightRadius: 5, borderBottomLeftRadius: 5 }}>
-            <code className="language-bash" style={{ whiteSpace: "pre" }}><span>$ {this.props.command}</span></code>
-            <code className="language-bash" style={{ whiteSpace: "pre" }}><span>{this.props.result}</span></code>
+            <code className="language-bash" style={{ whiteSpace: "pre" }}><span>$ {value}</span></code>
+            {this.props.result && <code className="language-bash" style={{ whiteSpace: "pre" }}><span>{this.props.result}</span></code>}
           </pre>
         </div>
       </div>

@@ -2,13 +2,16 @@
 sidebar_position: 4
 ---
 
+import Terminal from '@site/src/components/Terminal';
+
 # Otoroshi cluster metrics
 
 
 at any moment you can get your cluster metrics with the command
 
-```bash
-$ otoroshictl metrics
+<Terminal 
+    command="otoroshictl metrics"
+    result={`
 
 +-------------------------------------------------------------------------------+---------+-------+-------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+-----------------------+---------------------+----------------------+----------------------+-----------------------+----------------+--------------+
 | name                                                                          | type    | value | count | max                  | mean                 | min                  | p50                  | p75                  | p95                  | p98                  | p99                  | p999                 | stddev                | m15_rate            | m1_rate              | m5_rate              | mean_rate             | duration_units | rate_units   |
@@ -28,14 +31,15 @@ $ otoroshictl metrics
 | ng-report-request-step-choose-backend                                         | metrics |       |   2   |      13.332542       |  4.122134612669894   |  0.8214159999999999  |  0.8214159999999999  |      13.332542       |      13.332542       |      13.332542       |      13.332542       |      13.332542       |   5.51370683783902    | 0.08271209918305132 | 4.004387308935412e-7 | 0.014181951750430924 | 0.0024725559372333356 | milliseconds   | calls/second |
 +-------------------------------------------------------------------------------+---------+-------+-------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+-----------------------+---------------------+----------------------+----------------------+-----------------------+----------------+--------------+
 ...
-```
+`} />
 
 you can also use the `--columns` parameter to filter ou columns or `--filters` to get only the desired rows
 
 ## Metrics command usage
 
-```bash
-$ otoroshictl metrics -h
+<Terminal 
+    command="otoroshictl metrics -h"
+    result={`
 
 Display metrics of the current otoroshi cluster
 
@@ -78,4 +82,4 @@ Options:
           Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
   -h, --help
           Print help
-```
+`} />

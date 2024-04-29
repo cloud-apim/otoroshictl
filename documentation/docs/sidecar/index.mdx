@@ -2,14 +2,17 @@
 sidebar_position: 1
 ---
 
+import Terminal from '@site/src/components/Terminal';
+
 # The mesh sidecar
 
 This page is still being written. Please be patient :)
 
 `otoroshictl` sidecar allow to create a service mesh that can work inside and/or outside a kubernetes cluster
 
-```bash
-$ otoroshictl sidecar -h
+<Terminal not_ 
+    command="otoroshictl sidecar -ht"
+    result={`
 
 Manage an otoroshi mesh sidecar
 
@@ -56,7 +59,7 @@ Options:
           Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
   -h, --help
           Print help
-```
+`} />
 
 the config. file format is the following
 

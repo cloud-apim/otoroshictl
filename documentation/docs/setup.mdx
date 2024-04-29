@@ -2,32 +2,36 @@
 sidebar_position: 3
 ---
 
+import Terminal from '@site/src/components/Terminal';
+
 # Setup
 
 `otoroshictl` is capable of managing multiple otoroshi clusters with multiple users, but the first thing we need to make is to create the `otoroshictl` config file.
 
 To do that, try
 
-```bash
-$ otoroshictl config reset
-```
+<Terminal 
+    command="otoroshictl config reset"
+/>
 
 then you'll be able to list the otoroshi cluster you can manage with 
 
-```bash
-$ otoroshictl config list
+<Terminal 
+    command="otoroshictl config list"
+    result={`
 
 +---------+---------+------------+
 | name    | current | cloud_apim |
 +---------+---------+------------+
 | default | yes     |            |
 +---------+---------+------------+
-```
+`} />
 
 and display the current one
 
-```bash
-$ otoroshictl config current-config
+<Terminal 
+    command="otoroshictl config current-config"
+    result={`
 
 ---
 apiVersion: v1
@@ -56,7 +60,7 @@ clusters:
     routing_tls: ~
     routing_ip_addresses: ~
 current_context: default
-```
+`} />
 
 by default the registered otoroshi cluster is supposed to be local and use default credentials, but you can modify it of even create a new one
 
@@ -64,16 +68,16 @@ by default the registered otoroshi cluster is supposed to be local and use defau
 
 to create a new cluster configuration just do the following
 
-```bash
-$ otoroshictl config add new-cluster --hostname otoroshi.foo.bar --port 8443 --tls --client-id xxx --client-secret xxxxx
-```
+<Terminal 
+    command="otoroshictl config add new-cluster --hostname otoroshi.foo.bar --port 8443 --tls --client-id xxx --client-secret xxxxx" />
 
 you can even add `--current` to make it the current one
 
 now if you list your clusters you have 
 
-```bash
-$ otoroshictl config list
+<Terminal 
+    command="otoroshictl config list"
+    result={`
 
 +-------------+---------+------------+
 | name        | current | cloud_apim |
@@ -82,12 +86,13 @@ $ otoroshictl config list
 +-------------+---------+------------+
 | new-cluster | yes     |            |
 +-------------+---------+------------+
-```
+`} />
 
 with the content
 
-```bash
-$ otoroshictl config current-config
+<Terminal 
+    command="otoroshictl config current-config"
+    result={`
 
 ---
 apiVersion: v1
@@ -134,14 +139,15 @@ clusters:
     routing_tls: false
     routing_ip_addresses: ~
 current_context: new-cluster
-```
+`} />
 
 ## Change the current config.
 
 you can change the current config at any moment using the `use` command
 
-```bash
-$ otoroshictl config list
+<Terminal 
+    command="otoroshictl config list"
+    result={`
 
 +-------------+---------+------------+
 | name        | current | cloud_apim |
@@ -162,17 +168,19 @@ $ otoroshictl config list
 | new-cluster | yes     |            |
 +-------------+---------+------------+
 
-```
+`} />
 
 ## Modify an existing cluster
 
 you can also change an existing configuration with the commands `set-cluster`, `set-user`, `set-context`
 
-```bash
-$ otoroshictl config set-cluster new-cluster --hostname otoroshi.bar.foo --port 8080 --tls false
-$ otoroshictl config set-user new-cluster --client-id yyy ---client-id yyyyyyy
+<Terminal 
+    command="otoroshictl config set-cluster new-cluster --hostname otoroshi.bar.foo --port 8080 --tls false
+$ otoroshictl config set-user new-cluster --client-id yyy ---client-id yyyyyyy" />
 
-$ otoroshictl config current-config
+<Terminal 
+    command="otoroshictl config current-config"
+    result={`
 
 ---
 apiVersion: v1
@@ -219,12 +227,13 @@ clusters:
     routing_tls: false
     routing_ip_addresses: ~
 current_context: new-cluster
-```
+`} />
 
 ## All possible config. subcommands
 
-```bash
-$ otoroshictl config -h
+<Terminal 
+    command="otoroshictl config -h"
+    result={`
 
 Manage all the otoroshi cluster configurations you want to connect to with otoroshictl
 
@@ -287,4 +296,4 @@ Options:
           Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
   -h, --help
           Print help
-```
+`} />
