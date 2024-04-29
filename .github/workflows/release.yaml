@@ -53,14 +53,14 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18.x'
-      - name: Build doc
-        run: |
-          cd ./documentation
-          npm install
-          npm run build
-          cd ..
-          rm -rf ./docs
-          mv ./documentation/build ./docs 
+      # - name: Build doc
+      #   run: |
+      #     cd ./documentation
+      #     npm install
+      #     npm run build
+      #     cd ..
+      #     rm -rf ./docs
+      #     mv ./documentation/build ./docs 
       - name: Rename binary (linux and macos)
         run: mv ./target/${{ matrix.platform.target }}/release/otoroshictl ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
         if: matrix.platform.os_name != 'Windows-x86_64'
