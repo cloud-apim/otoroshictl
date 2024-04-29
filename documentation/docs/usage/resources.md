@@ -100,7 +100,6 @@ $ otoroshictl resources get certificates
 +-----------------------------------------------+----------------------------------------------+--------------------------------------------------+---------+------+----------+
 | id                                            | name                                         | description                                      | enabled | tags | metadata |
 +-----------------------------------------------+----------------------------------------------+--------------------------------------------------+---------+------+----------+
-+-----------------------------------------------+----------------------------------------------+--------------------------------------------------+---------+------+----------+
 | otoroshi-client                               | Otoroshi Default Client Certificate          | Otoroshi client certificate (auto-generated)     |         |  0   |    2     |
 +-----------------------------------------------+----------------------------------------------+--------------------------------------------------+---------+------+----------+
 | otoroshi-intermediate-ca                      | Otoroshi Default Intermediate CA Certificate | Otoroshi intermediate CA (auto-generated)        |         |  0   |    2     |
@@ -452,28 +451,28 @@ $ otoroshictl resources export -d export
 $ ls -l ./export
 
 total 808
--rw-r--r--@ 1 otoroshi  otoroshi       2 29 avr 10:46 admin-sessions.json
--rw-r--r--@ 1 otoroshi  otoroshi     571 29 avr 10:46 admins.json
--rw-r--r--@ 1 otoroshi  otoroshi   10724 29 avr 10:46 apikeys.json
--rw-r--r--@ 1 otoroshi  otoroshi       2 29 avr 10:46 auth-module-users.json
--rw-r--r--@ 1 otoroshi  otoroshi    5633 29 avr 10:46 auth-modules.json
--rw-r--r--@ 1 otoroshi  otoroshi    1650 29 avr 10:46 backends.json
--rw-r--r--@ 1 otoroshi  otoroshi   72071 29 avr 10:46 certificates.json
--rw-r--r--@ 1 otoroshi  otoroshi     823 29 avr 10:46 coraza-configs.json
--rw-r--r--@ 1 otoroshi  otoroshi    5620 29 avr 10:46 data-exporters.json
--rw-r--r--@ 1 otoroshi  otoroshi    8473 29 avr 10:46 error-templates.json
--rw-r--r--@ 1 otoroshi  otoroshi   10124 29 avr 10:46 global-configs.json
--rw-r--r--@ 1 otoroshi  otoroshi    2332 29 avr 10:46 green-scores.json
--rw-r--r--@ 1 otoroshi  otoroshi     704 29 avr 10:46 jwt-verifiers.json
--rw-r--r--@ 1 otoroshi  otoroshi     404 29 avr 10:46 organizations.json
--rw-r--r--@ 1 otoroshi  otoroshi  205196 29 avr 10:46 routes.json
--rw-r--r--@ 1 otoroshi  otoroshi       2 29 avr 10:46 scripts.json
--rw-r--r--@ 1 otoroshi  otoroshi    6590 29 avr 10:46 service-descriptors.json
--rw-r--r--@ 1 otoroshi  otoroshi     646 29 avr 10:46 service-groups.json
--rw-r--r--@ 1 otoroshi  otoroshi       2 29 avr 10:46 tcp-services.json
--rw-r--r--@ 1 otoroshi  otoroshi     473 29 avr 10:46 teams.json
--rw-r--r--@ 1 otoroshi  otoroshi     392 29 avr 10:46 tenants.json
--rw-r--r--@ 1 otoroshi  otoroshi    6086 29 avr 10:46 wasm-plugins.json
+-rw-r--r--@ 1 otoroshi  otoroshi       2 26 avr 10:46 admin-sessions.json
+-rw-r--r--@ 1 otoroshi  otoroshi     571 26 avr 10:46 admins.json
+-rw-r--r--@ 1 otoroshi  otoroshi   10724 26 avr 10:46 apikeys.json
+-rw-r--r--@ 1 otoroshi  otoroshi       2 26 avr 10:46 auth-module-users.json
+-rw-r--r--@ 1 otoroshi  otoroshi    5633 26 avr 10:46 auth-modules.json
+-rw-r--r--@ 1 otoroshi  otoroshi    1650 26 avr 10:46 backends.json
+-rw-r--r--@ 1 otoroshi  otoroshi   72071 26 avr 10:46 certificates.json
+-rw-r--r--@ 1 otoroshi  otoroshi     823 26 avr 10:46 coraza-configs.json
+-rw-r--r--@ 1 otoroshi  otoroshi    5620 26 avr 10:46 data-exporters.json
+-rw-r--r--@ 1 otoroshi  otoroshi    8473 26 avr 10:46 error-templates.json
+-rw-r--r--@ 1 otoroshi  otoroshi   10124 26 avr 10:46 global-configs.json
+-rw-r--r--@ 1 otoroshi  otoroshi    2332 26 avr 10:46 green-scores.json
+-rw-r--r--@ 1 otoroshi  otoroshi     704 26 avr 10:46 jwt-verifiers.json
+-rw-r--r--@ 1 otoroshi  otoroshi     404 26 avr 10:46 organizations.json
+-rw-r--r--@ 1 otoroshi  otoroshi  205196 26 avr 10:46 routes.json
+-rw-r--r--@ 1 otoroshi  otoroshi       2 26 avr 10:46 scripts.json
+-rw-r--r--@ 1 otoroshi  otoroshi    6590 26 avr 10:46 service-descriptors.json
+-rw-r--r--@ 1 otoroshi  otoroshi     646 26 avr 10:46 service-groups.json
+-rw-r--r--@ 1 otoroshi  otoroshi       2 26 avr 10:46 tcp-services.json
+-rw-r--r--@ 1 otoroshi  otoroshi     473 26 avr 10:46 teams.json
+-rw-r--r--@ 1 otoroshi  otoroshi     392 26 avr 10:46 tenants.json
+-rw-r--r--@ 1 otoroshi  otoroshi    6086 26 avr 10:46 wasm-plugins.json
 ```
 
 or ask to split everything in one file per entity
@@ -483,24 +482,24 @@ $ otoroshictl resources export -d export --split-files
 $ ls -l ./export
 
 total 0
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:50 admins
-drwxr-xr-x@ 11 otoroshi  otoroshi   352 29 avr 10:50 apikeys
-drwxr-xr-x@  5 otoroshi  otoroshi   160 29 avr 10:50 auth-modules
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:48 backends
-drwxr-xr-x@ 13 otoroshi  otoroshi   416 29 avr 10:50 certificates
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:50 coraza-configs
-drwxr-xr-x@  8 otoroshi  otoroshi   256 29 avr 10:50 data-exporters
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:50 error-templates
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:50 global-configs
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:50 green-scores
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:50 jwt-verifiers
-drwxr-xr-x@  4 otoroshi  otoroshi   128 29 avr 10:50 organizations
-drwxr-xr-x@ 64 otoroshi  otoroshi  2048 29 avr 10:48 routes
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:48 service-descriptors
-drwxr-xr-x@  4 otoroshi  otoroshi   128 29 avr 10:50 service-groups
-drwxr-xr-x@  3 otoroshi  otoroshi    96 29 avr 10:50 teams
-drwxr-xr-x@  4 otoroshi  otoroshi   128 29 avr 10:50 tenants
-drwxr-xr-x@  6 otoroshi  otoroshi   192 29 avr 10:50 wasm-plugins
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 admins
+drwxr-xr-x@ 11 otoroshi  otoroshi   352 26 avr 10:50 apikeys
+drwxr-xr-x@  5 otoroshi  otoroshi   160 26 avr 10:50 auth-modules
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:48 backends
+drwxr-xr-x@ 13 otoroshi  otoroshi   416 26 avr 10:50 certificates
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 coraza-configs
+drwxr-xr-x@  8 otoroshi  otoroshi   256 26 avr 10:50 data-exporters
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 error-templates
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 global-configs
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 green-scores
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 jwt-verifiers
+drwxr-xr-x@  4 otoroshi  otoroshi   128 26 avr 10:50 organizations
+drwxr-xr-x@ 64 otoroshi  otoroshi  2048 26 avr 10:48 routes
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:48 service-descriptors
+drwxr-xr-x@  4 otoroshi  otoroshi   128 26 avr 10:50 service-groups
+drwxr-xr-x@  3 otoroshi  otoroshi    96 26 avr 10:50 teams
+drwxr-xr-x@  4 otoroshi  otoroshi   128 26 avr 10:50 tenants
+drwxr-xr-x@  6 otoroshi  otoroshi   192 26 avr 10:50 wasm-plugins
 ```
 
 you can also export in yaml and with kubernetes manifest armoring
