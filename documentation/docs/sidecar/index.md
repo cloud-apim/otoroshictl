@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# Otoroshi universal mesh sidecar
+# Mesh sidecar
 
 This page is still being written. Please be patient :)
 
