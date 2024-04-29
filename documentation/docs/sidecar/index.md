@@ -5,3 +5,166 @@ sidebar_position: 1
 # Otoroshi universal mesh sidecar
 
 This page is still being written. Please be patient :)
+
+otoroshictl sidecar allow to create a service mesh that can work inside and/or outside a kubernetes cluster
+
+```bash
+$ otoroshictl sidecar -h
+
+Manage an otoroshi mesh sidecar
+
+Usage: otoroshictl sidecar [OPTIONS] <COMMAND>
+
+Commands:
+  howto            Display instructions to install/run the sidecar
+  run              Run otoroshi sidecar
+  generate-config
+  install          Install transparent proxing of the mesh calls through iptables rules
+  uninstall        Uninstall transparent proxing of the mesh calls through iptables rules
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+  -v, --verbose
+          Turn debugging information on
+  -o, --ouput <FORMAT>
+          Change the rendering format (can be one of: json, yaml, json_pretty)
+  -c, --config-file <FILE or URL>
+          Sets a custom config file
+      --otoroshi-cluster-tls
+          Sets the tls flag to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-hostname <HOSTNAME>
+          Sets the hostname to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-port <PORT>
+          Sets the port to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-routing-tls
+          Sets the tls flag to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-routing-hostname <HOSTNAME>
+          Sets the hostname to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-routing-port <PORT>
+          Sets the port to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-user-client-id <CLIENT_ID>
+          Sets the client_id to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-user-client-secret <CLIENT_SECRET>
+          Sets the client_secret to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-user-health-key <HEALTH_KEY>
+          Sets the health_key to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-cert-location <FILE>
+          Sets the client cert location to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-key-location <FILE>
+          Sets the client cert key location to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-ca-location <FILE>
+          Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
+  -h, --help
+          Print help
+```
+
+the config. file format is the following
+
+```yaml
+apiVersion: proxy.otoroshi.io/v1
+kind: Sidecar
+metadata:
+  name: my-sidecar
+spec:
+  # optional
+  kubernetes: false
+  # catch DNS request to route *.otoroshi.mesh to otoroshi, can be disabled in kubernetes if coredns is configured
+  dns_integration: true
+  # optional the mesh domain to catch
+  dns_domain: .otoroshi.mesh
+  # how to talk to the local otoroshi cluster
+  otoroshi:
+    # location can be omitted in kubernetes
+    location:
+      hostname: otoroshi-api.oto.tools
+      kubernetes:
+        service: otoroshi-service
+        namespace: otoroshi
+      port: 9999
+      tls: false
+    # location can be omitted in kubernetes
+    routing_location:
+      hostname: routing.oto.tools
+      kubernetes:
+        service: otoroshi-service
+        namespace: otoroshi
+      port: 9998
+      tls: true
+    credentials:
+      # we must support file path here or ENV.name
+      client_id: admin-api-apikey-id
+      client_secret: admin-api-apikey-secret
+    client_cert:
+      # optional
+      cert_location: /tmp/cert.pem
+      # optional
+      cert_value: |
+        ---- BEGIN CERTIFICATE -----
+        xxxxxxxxxxxxxxxxxxx
+        ---- END CERTIFICATE ----
+      # optional
+      key_location: /tmp/cert.pem
+      # optional
+      key_value: |
+        ---- BEGIN PRIVATE KEY -----
+        xxxxxxxxxxxxxxxxxxx
+        ---- END PRIVATE KEY ----
+  # how we expose the local app
+  inbound:
+    port: 15000
+    # optional
+    target_port: 3000
+    # optional
+    target_hostname: api-a.foo.bar
+    tls: 
+      enabled: true
+      # optional otoroshi certificate id
+      cert_id: jEVeLxI2eeAfyeFcZ0pRIN5EOqp8bYxWqVw43e7r3CQtUM6hl8VmsJiOJOPYpXiv
+    mtls:
+      enabled: true
+      # optional otoroshi ca certificate id
+      ca_cert_id: otoroshi-intermediate-ca
+    otoroshi_protocol:
+      enabled: true
+      # optional otoroshi route id to get config if symmetrical
+      route_id: xxxx
+      # optional
+      secret: xxxxx
+      # optional
+      algo: HS256
+      # optional
+      version: V2
+      # optional
+      header_in_name: xxxx
+      # optional
+      header_out_name: xxxx
+  # what we want to call from the local app and how
+  outbounds:
+    # optional internal proxy port
+    port: 15001
+    sidecar-outbound.otoroshi.mesh:
+      # can be omitted if same as key
+      hostname: sidecar-outbound.otoroshi.mesh
+      # optional
+      path: /api/.*
+      apikey: 
+        enabled: true
+        # optional otoroshi apikey entity id
+        apikey_id: apki_oDJ0IJT4ReBnhOlP
+      mtls: 
+        enabled: true
+        # optional otoroshi certificate id
+        client_cert_id: otoroshi-client
+    service-b.otoroshi.mesh:
+      # can be omitted if same as key
+      hostname: service-b.otoroshi.mesh
+      # optional
+      path: /.*
+      apikey: 
+        enabled: true
+        # optional otoroshi apikey entity id
+        apikey_id: apki_oDJ0IJT4ReBnhOlP
+        enabled: true
+        # optional otoroshi certificate id
+        client_cert_id: otoroshi-client
+```

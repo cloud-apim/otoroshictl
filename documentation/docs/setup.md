@@ -1,8 +1,8 @@
 ---
-sidebar_position: 1
+sidebar_position: 3
 ---
 
-# Setup otoroshictl
+# Setup
 
 `otoroshictl` is capable of managing multiple otoroshi clusters with multiple users, but the first thing we need to make is to create the `otoroshictl` config file.
 

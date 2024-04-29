@@ -1,8 +1,8 @@
 ---
-sidebar_position: 1
+sidebar_position: 2
 ---
 
-# Download
+# Install
 
 you can download the latest release of `otoroshictl` from https://github.com/cloud-apim/otoroshictl/releases/latest
 

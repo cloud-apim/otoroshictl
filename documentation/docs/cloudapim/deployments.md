@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# Cloud APIM integration
+# Otoroshi deployments
 
 you can link your [Cloud APIM](https://www.cloud-apim.com) account into your `otoroshictl` config, just do
 

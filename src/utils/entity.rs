@@ -8,6 +8,7 @@ impl EntityHelper {
             .or_else(|| entity.get("clientId"))
             .or_else(|| entity.get("username"))
             .or_else(|| entity.get("otoroshiId"))
+            .or_else(|| entity.get("serviceId"))
             .or_else(|| entity.get("randomId"))
             .and_then(|id| {
                 id.as_str().map(|v| v.to_string())
@@ -20,6 +21,7 @@ impl EntityHelper {
             .or_else(|| entity.get("clientId"))
             .or_else(|| entity.get("username"))
             .or_else(|| entity.get("otoroshiId"))
+            .or_else(|| entity.get("serviceId"))
             .or_else(|| entity.get("randomId"))
             .and_then(|id| {
                 id.as_str().map(|v| v.to_string())

@@ -4,44 +4,69 @@ sidebar_position: 1
 
 # Overview
 
-Let's discover **Docusaurus in less than 5 minutes**.
+Let's discover **otoroshictl** the command line tool to manage your otoroshi clusters with style.
 
-## Getting Started
-
-Get started by **creating a new site**.
-
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
-
-### What you'll need
-
-- [Node.js](https://nodejs.org/en/download/) version 18.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
-
-## Generate a new site
-
-Generate a new Docusaurus site using the **classic template**.
-
-The classic template will automatically be added to your project after you run the command:
+**otoroshictl** let you manage almost any aspect of an otoroshi cluster. You just need to download the binary and your good to go. 
+Please let **otoroshictl** introduce itself :)
 
 ```bash
-npm init docusaurus@latest my-website classic
+$ otoroshictl -h
+
+Manage your otoroshi clusters with style. otoroshictl is a CLI that can interact with the admin api of an otoroshi cluster.
+
+You can also use it to expose local process through the otoroshi remote tunnels feature and as an universal sidecar to create a service mesh based on otoroshi. otoroshictl also provide a nice integration with Cloud APIM.
+
+otoroshictl is an open-source tool proudly provided by Cloud APIM (https://www.cloud-apim.com). Cloud APIM is a company that provides managed Otoroshi clusters and Wasmo instances perfectly configured and optimized, ready in seconds. The sources of otoroshictl are available on github at https://github.com/cloud-apim/otoroshictl
+
+Usage: otoroshictl [OPTIONS] [COMMAND]
+
+Commands:
+  resources      Manage all the resources (entities) of the current otoroshi cluster
+  sidecar        Manage an otoroshi mesh sidecar
+  tcp-tunnel     Manage otoroshi tcp tunnel to access tcp resources through the current otoroshi cluster (not implemented yet)
+  cloud-apim     Manage cloud apim clusters
+  remote-tunnel  Exposes local processes on the current otoroshi cluster through the otoroshi remote tunnel feature
+  version        Display the version of the current otoroshi cluster
+  infos          Display the informations about the current otoroshi cluster
+  entities       Display the managed entities of the current otoroshi cluster
+  health         Display the health status of the current otoroshi cluster
+  metrics        Display metrics of the current otoroshi cluster
+  config         Manage all the otoroshi cluster configurations you want to connect to with otoroshictl
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+  -v, --verbose
+          Turn debugging information on
+  -o, --ouput <FORMAT>
+          Change the rendering format (can be one of: json, yaml, json_pretty)
+  -c, --config-file <FILE or URL>
+          Sets a custom config file
+      --otoroshi-cluster-tls
+          Sets the tls flag to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-hostname <HOSTNAME>
+          Sets the hostname to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-port <PORT>
+          Sets the port to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-routing-tls
+          Sets the tls flag to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-routing-hostname <HOSTNAME>
+          Sets the hostname to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-routing-port <PORT>
+          Sets the port to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-user-client-id <CLIENT_ID>
+          Sets the client_id to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-user-client-secret <CLIENT_SECRET>
+          Sets the client_secret to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-user-health-key <HEALTH_KEY>
+          Sets the health_key to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-cert-location <FILE>
+          Sets the client cert location to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-key-location <FILE>
+          Sets the client cert key location to connect to a custom otoroshi cluster without using a config file
+      --otoroshi-cluster-ca-location <FILE>
+          Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
-
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
-
-The command also installs all necessary dependencies you need to run Docusaurus.
-
-## Start your site
-
-Run the development server:
-
-```bash
-cd my-website
-npm run start
-```
-
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
-
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
-
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
