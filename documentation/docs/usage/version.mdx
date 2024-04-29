@@ -2,24 +2,28 @@
 sidebar_position: 5
 ---
 
+import Terminal from '@site/src/components/Terminal';
+
 # Otoroshi cluster version
 
 at any moment you can get your cluster version with the command
 
-```bash
-$ otoroshictl version
-
+<Terminal 
+    command="otoroshictl version"
+    result={`
+    
 +-------------+-------+-------+-------+-------+--------+----------------+
 | version     | major | minor | patch | build | suffix | suffix version |
 +-------------+-------+-------+-------+-------+--------+----------------+
 | 16.17.0-dev | 16    | 17    | 0     |       | dev    |                |
 +-------------+-------+-------+-------+-------+--------+----------------+
-```
+`} />
 
 ## Version command usage
 
-```bash
-$ otoroshictl version -h
+<Terminal 
+    command="otoroshictl version"
+    result={`
 
 Display the version of the current otoroshi cluster
 
@@ -58,4 +62,4 @@ Options:
           Sets the client cert ca location to connect to a custom otoroshi cluster without using a config file
   -h, --help
           Print help
-```
+`} />
