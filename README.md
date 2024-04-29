@@ -6,6 +6,12 @@ You can also use it to expose local process through the otoroshi remote tunnels 
 
 otoroshictl is an open-source tool proudly provided by Cloud APIM (https://www.cloud-apim.com). Cloud APIM is a company that provides managed Otoroshi clusters and Wasmo instances perfectly configured and optimized, ready in seconds. The sources of otoroshictl are available on github at https://github.com/cloud-apim/otoroshictl
 
+## Documentation
+
+the full documentation for `otoroshictl` is available [here](cloud-apim.github.io/otoroshictl/)
+
+## Demo
+
 <p align="center">
   <img width="750" src="./demo.svg">
 </p>
