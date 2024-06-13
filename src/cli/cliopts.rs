@@ -237,6 +237,9 @@ pub enum ResourcesSubCommand {
     Rbac {
         #[arg(short, long, value_name = "FILE")] // ok just file because writing
         file: Option<PathBuf>,
+        /// the namespace used for the ServiceAccount
+        #[arg(long)]
+        namespace: Option<String>,
     }, 
     /// Get otoroshi resource from current cluster
     Get {

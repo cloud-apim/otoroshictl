@@ -481,13 +481,14 @@ impl ResourcesCommand {
 
     pub async fn display(cli_opts: CliOpts, command: &ResourcesSubCommand) -> () {
         match command {
-            ResourcesSubCommand::Rbac { file } => {
+            ResourcesSubCommand::Rbac { file, namespace } => {
                 let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
                 let resources = exposed_resources.resources.into_iter().map(|resource| {
                     format!("        - {}", resource.plural_name)
                 })
                 .collect::<Vec<String>>()
                 .join("\n");
+                let final_namespace: String = namespace.to_owned().unwrap_or("default".to_string());
                 let output: String = format!("---
 kind: ServiceAccount
 apiVersion: v1
@@ -505,7 +506,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
     name: otoroshi-admin-user
-    namespace: $namespace
+    namespace: {}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -575,7 +576,7 @@ rules:
         - get
         - list
         - watch
-", resources); 
+", final_namespace, resources); 
                 match file {
                     None => {
                         cli_stdout_printline!("{}", output)
