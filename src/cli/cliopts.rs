@@ -240,6 +240,9 @@ pub enum ResourcesSubCommand {
         /// the namespace used for the ServiceAccount
         #[arg(long)]
         namespace: Option<String>,
+        /// the username used for the ServiceAccount, ClusterRoleBinding, ClusterRole
+        #[arg(long)]
+        username: Option<String>,
     }, 
     /// Get otoroshi resource from current cluster
     Get {

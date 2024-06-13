@@ -481,7 +481,7 @@ impl ResourcesCommand {
 
     pub async fn display(cli_opts: CliOpts, command: &ResourcesSubCommand) -> () {
         match command {
-            ResourcesSubCommand::Rbac { file, namespace } => {
+            ResourcesSubCommand::Rbac { file, username, namespace } => {
                 let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
                 let resources = exposed_resources.resources.into_iter().map(|resource| {
                     format!("      - {}", resource.plural_name)
@@ -489,29 +489,30 @@ impl ResourcesCommand {
                 .collect::<Vec<String>>()
                 .join("\n");
                 let final_namespace: String = namespace.to_owned().unwrap_or("default".to_string());
+                let final_username: String = username.to_owned().unwrap_or("otoroshi-admin-user".to_string());
                 let output: String = format!("---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
-  name: otoroshi-admin-user
+  name: {}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: otoroshi-admin-user
+  name: {}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: otoroshi-admin-user
+  name: {}
 subjects:
 - kind: ServiceAccount
-  name: otoroshi-admin-user
+  name: {}
   namespace: {}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: otoroshi-admin-user
+  name: {}
 rules:
   - apiGroups:
       - \"\"
@@ -577,7 +578,7 @@ rules:
       - get
       - list
       - watch
-", final_namespace, resources); 
+", final_username, final_username, final_username, final_username, final_namespace, final_username, resources); 
                 match file {
                     None => {
                         cli_stdout_printline!("{}", output)
