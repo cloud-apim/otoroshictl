@@ -484,7 +484,7 @@ impl ResourcesCommand {
             ResourcesSubCommand::Rbac { file, namespace } => {
                 let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
                 let resources = exposed_resources.resources.into_iter().map(|resource| {
-                    format!("        - {}", resource.plural_name)
+                    format!("      - {}", resource.plural_name)
                 })
                 .collect::<Vec<String>>()
                 .join("\n");
@@ -493,89 +493,90 @@ impl ResourcesCommand {
 kind: ServiceAccount
 apiVersion: v1
 metadata:
-    name: otoroshi-admin-user
+  name: otoroshi-admin-user
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-    name: otoroshi-admin-user
+  name: otoroshi-admin-user
 roleRef:
-    apiGroup: rbac.authorization.k8s.io
-    kind: ClusterRole
-    name: otoroshi-admin-user
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otoroshi-admin-user
 subjects:
 - kind: ServiceAccount
-    name: otoroshi-admin-user
-    namespace: {}
+  name: otoroshi-admin-user
+  namespace: {}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-    name: otoroshi-admin-user
+  name: otoroshi-admin-user
 rules:
-    - apiGroups:
-        - \"\"
+  - apiGroups:
+      - \"\"
     resources:
-        - services
-        - endpoints
-        - secrets
-        - configmaps
-        - deployments
-        - namespaces
-        - pods
+      - services
+      - endpoints
+      - secrets
+      - configmaps
+      - deployments
+      - pods
+      - namespaces
     verbs:
-        - get
-        - list
-        - watch
-    - apiGroups:
-        - \"apps\"
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - \"apps\"
     resources:
-        - deployments
+      - deployments
     verbs:
-        - get
-        - list
-        - watch
-    - apiGroups:
-        - \"\"
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - \"\"
     resources:
-        - secrets
-        - configmaps
+      - secrets
+      - configmaps
     verbs:
-        - update
-        - create
-        - delete
-    - apiGroups:
-        - extensions
+      - update
+      - update
+      - create
+      - delete
+  - apiGroups:
+      - extensions
     resources:
-        - ingresses
-        - ingressclasses
+      - ingresses
+      - ingressclasses
     verbs:
-        - get
-        - list
-        - watch
-    - apiGroups:
-        - extensions
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
     resources:
-        - ingresses/status
+      - ingresses/status
     verbs:
-        - update
-    - apiGroups:
-        - admissionregistration.k8s.io
+      - update
+  - apiGroups:
+      - admissionregistration.k8s.io
     resources:
-        - validatingwebhookconfigurations
-        - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+      - mutatingwebhookconfigurations
     verbs:
-        - get
-        - update
-        - patch                
-    - apiGroups:
-        - proxy.otoroshi.io
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - proxy.otoroshi.io
     resources:
 {}
     verbs:
-        - get
-        - list
-        - watch
+      - get
+      - list
+      - watch
 ", final_namespace, resources); 
                 match file {
                     None => {
