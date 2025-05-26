@@ -16,6 +16,8 @@ the full documentation for `otoroshictl` is available [here](cloud-apim.github.i
 cargo install otoroshictl
 ```
 
+or download a pre-built binary from https://github.com/cloud-apim/otoroshictl/releases
+
 ## Demo
 
 <p align="center">
