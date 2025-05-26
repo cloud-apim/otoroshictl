@@ -8,7 +8,7 @@ otoroshictl is an open-source tool proudly provided by Cloud APIM (https://www.c
 
 ## Documentation
 
-the full documentation for `otoroshictl` is available [here](cloud-apim.github.io/otoroshictl/)
+the full documentation for `otoroshictl` is available [here](https://cloud-apim.github.io/otoroshictl/docs/overview)
 
 ## Installation
 
