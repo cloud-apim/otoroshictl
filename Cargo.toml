@@ -1,7 +1,15 @@
 [package]
 name = "otoroshictl"
-version = "1.0.0"
+version = "0.0.5"
 edition = "2021"
+authors = ["mathieu.ancelin@cloud-apim.com"]
+license = "Apache-2.0"
+description = "a CLI to manage your otoroshi clusters with style ;)"
+readme = "README.md"
+repository = "https://github.com/cloud-apim/otoroshictl" 
+keywords = ["cli", "otoroshi", "apim", "otoroshi-as-code", "gitops"]
+categories = ["command-line-utilities"]
+documentation = "https://docs.rs/otoroshictl"
 
 [dependencies]
 async-recursion = "1.0.5"

@@ -10,6 +10,12 @@ otoroshictl is an open-source tool proudly provided by Cloud APIM (https://www.c
 
 the full documentation for `otoroshictl` is available [here](cloud-apim.github.io/otoroshictl/)
 
+## Installation
+
+```sh
+cargo install otoroshictl
+```
+
 ## Demo
 
 <p align="center">
