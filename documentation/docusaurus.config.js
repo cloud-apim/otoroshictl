@@ -58,7 +58,7 @@ const config = {
         title: 'otoroshictl',
         logo: {
           alt: 'otoroshictl Logo',
-          src: 'img/otoroshictl-logo.png',
+          src: 'img/otoroshictl-logo-nav.png',
         },
         items: [
           {
