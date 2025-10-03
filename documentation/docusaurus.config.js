@@ -10,7 +10,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 const config = {
   title: 'otoroshictl',
   tagline: 'Manage your Otoroshi clusters with style',
-  favicon: 'img/otoroshictl-logo.png',
+  favicon: 'img/otoroshictl-logo-nav.png',
 
   // Set the production url of your site here
   url: 'https://cloud-apim.github.io',
@@ -53,7 +53,7 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       // Replace with your project's social card
-      image: 'img/otoroshictl-logo.png',
+      image: 'img/otoroshictl-logo-nav.png',
       navbar: {
         title: 'otoroshictl',
         logo: {
