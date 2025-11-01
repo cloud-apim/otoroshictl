@@ -151,19 +151,19 @@ pub enum ConfigSubCommand {
         name: String,
         /// client_id of the cluster api
         #[arg(long)]
-        client_id: String,
+        client_id: Option<String>,
         /// client_secret of the cluster api
         #[arg(long)]
-        client_secret: String,
+        client_secret: Option<String>,
         /// health_access_key of the cluster for health and metrics
         #[arg(long)]
         health_key: Option<String>,
         /// hostname of the cluster api
         #[arg(long)]
-        hostname: String,
+        hostname: Option<String>,
         /// port of the cluster api
         #[arg(long)]
-        port: u16,
+        port: Option<u16>,
         /// does the cluster api uses tls
         #[arg(long, action = clap::ArgAction::SetTrue)]
         tls: bool,
@@ -179,6 +179,12 @@ pub enum ConfigSubCommand {
         /// tls flag used for routing (sidecar only)
         #[arg(long, action = clap::ArgAction::SetTrue)]
         routing_tls: Option<bool>,
+        /// Clever Cloud API token for authentication
+        #[arg(long)]
+        clever_token: Option<String>,
+        /// Otoroshi ID to import from Clever Cloud
+        #[arg(long)]
+        clever_otoroshi_id: Option<String>,
     },
     /// Delete a cluster
     DeleteCluster {

@@ -91,12 +91,27 @@ impl ConfigCommand {
             ConfigSubCommand::Delete { name } => {
                 Self::delete_full_context(name, cli_opts.clone()).await;
             }
-            ConfigSubCommand::Add { name, client_id, client_secret, health_key, hostname, port, tls , current, routing_hostname, routing_port, routing_tls } => {
-                Self::set_cluster(name, hostname, port, tls, routing_hostname, routing_port, routing_tls, cli_opts.clone()).await;
-                Self::set_user(name, client_id, client_secret, health_key, cli_opts.clone()).await;
-                Self::set_context(name, name, name, cli_opts.clone()).await;
-                if *current {
-                    Self::use_context(name, cli_opts.clone()).await;
+            ConfigSubCommand::Add { name, client_id, client_secret, health_key, hostname, port, tls , current, routing_hostname, routing_port, routing_tls, clever_token, clever_otoroshi_id } => {
+                if let (Some(token), Some(id)) = (clever_token, clever_otoroshi_id) {
+                    Self::import_from_clevercloud(&token, &id, name, current, cli_opts.clone()).await;
+                } else if clever_token.is_some() || clever_otoroshi_id.is_some() {
+                    cli_stderr_printline!("Both --clever-token and --clever-otoroshi-id are required to import from Clever Cloud");
+                    std::process::exit(-1);
+                } else {
+                    match (client_id, client_secret, hostname, port) {
+                        (Some(cid), Some(csec), Some(host), Some(p)) => {
+                            Self::set_cluster(name, host, p, tls, routing_hostname, routing_port, routing_tls, cli_opts.clone()).await;
+                            Self::set_user(name, cid, csec, health_key, cli_opts.clone()).await;
+                            Self::set_context(name, name, name, cli_opts.clone()).await;
+                            if *current {
+                                Self::use_context(name, cli_opts.clone()).await;
+                            }
+                        },
+                        _ => {
+                            cli_stderr_printline!("Missing required parameters. Either use --clever-token with --clever-otoroshi-id or provide --client-id, --client-secret, --hostname, and --port");
+                            std::process::exit(-1);
+                        }
+                    }
                 }
             }
         }
@@ -566,6 +581,56 @@ impl ConfigCommand {
                                 config.contexts = new_contexts;
                                 OtoroshiCtlConfig::write_current_config(config);
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn import_from_clevercloud(token: &String, otoroshi_id: &String, name: &String, current: &bool, cli_opts: CliOpts) -> () {
+        let url = format!("https://api-bridge.clever-cloud.com/v4/addon-providers/addon-otoroshi/addons/{}", otoroshi_id);
+
+        match crate::utils::http::Http::get_with_bearer(&url, token).await {
+            Err(err) => {
+                cli_stderr_printline!("Error fetching Clever Cloud addon '{}': {}", otoroshi_id, err);
+                std::process::exit(-1);
+            },
+            Ok(content) => {
+                match serde_json::from_slice::<serde_json::Value>(&content.content) {
+                    Err(err) => {
+                        cli_stderr_printline!("Error parsing Clever Cloud response for '{}': {}", otoroshi_id, err);
+                        std::process::exit(-1);
+                    },
+                    Ok(json) => {
+                        if let Some(api) = json.get("api") {
+                            let url = api.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                            let client_id = api.get("user").and_then(|v| v.as_str()).unwrap_or("");
+                            let client_secret = api.get("secret").and_then(|v| v.as_str()).unwrap_or("");
+
+                            if url.is_empty() || client_id.is_empty() || client_secret.is_empty() {
+                                cli_stderr_printline!("Missing required fields in Clever Cloud API response for '{}'", otoroshi_id);
+                                std::process::exit(-1);
+                            }
+
+                            // Extract hostname from URL
+                            let hostname = url.replace("https://", "").replace("http://", "");
+
+                            let port = 443u16;
+                            let tls = true;
+
+                            Self::set_cluster(name, &hostname.to_string(), &port, &tls, &None, &None, &None, cli_opts.clone()).await;
+                            Self::set_user(name, &client_id.to_string(), &client_secret.to_string(), &None, cli_opts.clone()).await;
+                            Self::set_context(name, name, name, cli_opts.clone()).await;
+
+                            cli_stdout_printline!("Successfully imported '{}' as '{}'", otoroshi_id, name);
+
+                            if *current {
+                                Self::use_context(name, cli_opts).await;
+                            }
+                        } else {
+                            cli_stderr_printline!("No 'api' object found in Clever Cloud response for '{}'", otoroshi_id);
+                            std::process::exit(-1);
                         }
                     }
                 }
