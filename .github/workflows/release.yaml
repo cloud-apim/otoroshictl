@@ -5,6 +5,8 @@ on:
     inputs:
       version:
         description: "Version number"
+        required: true
+        type: string
 env:
   CARGO_TERM_COLOR: always
 
@@ -82,7 +84,27 @@ jobs:
       run:
         working-directory: .
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: true
+        fetch-depth: 0
+    - name: Set up Git user
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+    - name: Update version in Cargo.toml
+      run: |
+        version="${{ github.event.inputs.version }}"
+        echo "Update version to ${version}"
+        sed -i "s/^version = \".*\"/version = \"${version}\"/" Cargo.toml
+    - name: Commit changes
+      run: |
+        git add Cargo.toml
+        git commit -m "chore: bump version to ${{ github.event.inputs.version }}" || echo "No changes to commit"
+    - name: Push changes
+      run: |
+        git push origin HEAD
     - name: Build
       run: cargo build --release
     - name: Publish to crates.io
