@@ -7,7 +7,6 @@ use crate::utils::entity::EntityHelper;
 use crate::utils::table::{TableResource, TableHelper};
 
 use std::collections::HashMap;
-use std::fmt::format;
 use std::{fs, path::PathBuf};
 
 use std::vec::Vec;
