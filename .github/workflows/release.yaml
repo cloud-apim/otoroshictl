@@ -17,11 +17,11 @@ jobs:
       matrix:
         platform:
           - os_name: Linux-x86_64
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bin: otoroshictl-linux-amd64
           - os_name: Linux-aarch64
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             bin: otoroshictl-linux-arm64
           - os_name: Windows-x86_64
@@ -77,14 +77,14 @@ jobs:
             ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
             ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
   
-#  cratesio:
-#      runs-on: ubuntu-latest
-#      defaults:
-#        run:
-#          working-directory: .
-#      steps:
-#      - uses: actions/checkout@v4
-#      - name: Build
-#        run: cargo build --verbose --release
-#      - name: Publish to crates.io
-#        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
+cratesio:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
