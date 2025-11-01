@@ -82,8 +82,8 @@ impl ConfigCommand {
             ConfigSubCommand::Reset {} => {
                 Self::nuke_config(cli_opts.clone()).await;
             },
-            ConfigSubCommand::Import { file, overwrite, current, name } => {
-                Self::import_context(file, overwrite, current, name, cli_opts.clone()).await;
+            ConfigSubCommand::Import { file, overwrite, current, name, stdin } => {
+                Self::import_context(file, overwrite, current, name, stdin, cli_opts.clone()).await;
             },
             ConfigSubCommand::List {} => {
                 Self::display_context_list(cli_opts.clone()).await;
@@ -124,78 +124,107 @@ impl ConfigCommand {
         }
     }
 
-    pub async fn import_context(path: &String, overwrite: &bool, change_current: &bool, name: &Option<String>, cli_opts: CliOpts) -> () {
-        match crate::utils::file::FileHelper::get_content_string_result(&path).await {
-            Err(err) => cli_stderr_printline!("{}", err),
-            Ok(content) => {
-                let imported_config = OtoroshiCtlConfig::read_from_string(&content).unwrap();
-                match name {
-                    Some(name) => {
-                        let mut config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-                        match imported_config.contexts.into_iter().find(|c| c.name == name.to_string()) {
-                            Some(ctx) => {
-                                let user = imported_config.users.into_iter().find(|u| u.name == ctx.user).unwrap();
-                                let cluster = imported_config.clusters.into_iter().find(|u| u.name == ctx.cluster).unwrap();
+    pub async fn import_context(path: &Option<String>, overwrite: &bool, change_current: &bool, name: &Option<String>, stdin: &bool, cli_opts: CliOpts) -> () {
+        let content = if *stdin {
+            // Read from stdin
+            if path.is_some() {
+                cli_stderr_printline!("Cannot use both --stdin and file argument");
+                std::process::exit(-1);
+            }
+            use std::io::Read;
+            let mut buffer = String::new();
+            match std::io::stdin().read_to_string(&mut buffer) {
+                Ok(_) => buffer,
+                Err(err) => {
+                    cli_stderr_printline!("Error reading from stdin: {}", err);
+                    std::process::exit(-1);
+                }
+            }
+        } else {
+            match path {
+                Some(p) => {
+                    // Read from file
+                    match crate::utils::file::FileHelper::get_content_string_result(p).await {
+                        Err(err) => {
+                            cli_stderr_printline!("{}", err);
+                            return;
+                        },
+                        Ok(c) => c,
+                    }
+                },
+                None => {
+                    cli_stderr_printline!("Either provide a file argument or use --stdin");
+                    std::process::exit(-1);
+                }
+            }
+        };
+        
+        let imported_config = OtoroshiCtlConfig::read_from_string(&content).unwrap();
+        match name {
+            Some(name) => {
+                let mut config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+                match imported_config.contexts.into_iter().find(|c| c.name == name.to_string()) {
+                    Some(ctx) => {
+                        let user = imported_config.users.into_iter().find(|u| u.name == ctx.user).unwrap();
+                        let cluster = imported_config.clusters.into_iter().find(|u| u.name == ctx.cluster).unwrap();
 
-                                config.users.push(user);
-                                config.clusters.push(cluster);
-                                config.contexts.push(ctx);
-                                config.contexts.dedup_by(|a, b| a.name == b.name);
-                                config.clusters.dedup_by(|a, b| a.name == b.name);
-                                config.users.dedup_by(|a, b| a.name == b.name);
-                                if change_current.to_owned() {
-                                    config.current_context = name.to_string();
-                                }
-                                OtoroshiCtlConfig::write_current_config(config);
-                            }, 
-                            _ => {
-                                cli_stdout_printline!("context name '{}' does not exists and cannot be imported", name);
-                                std::process::exit(-1)
-                            }
+                        config.users.push(user);
+                        config.clusters.push(cluster);
+                        config.contexts.push(ctx);
+                        config.contexts.dedup_by(|a, b| a.name == b.name);
+                        config.clusters.dedup_by(|a, b| a.name == b.name);
+                        config.users.dedup_by(|a, b| a.name == b.name);
+                        if change_current.to_owned() {
+                            config.current_context = name.to_string();
                         }
+                        OtoroshiCtlConfig::write_current_config(config);
                     }, 
                     _ => {
-                        if overwrite.to_owned() {
-                            OtoroshiCtlConfig::write_current_config(imported_config);
-                        } else {
-                            let config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-                            
-                            let mut users: HashMap<String, OtoroshiCtlConfigSpecUser> = HashMap::new();
-                            let mut contexts: HashMap<String, OtoroshiCtlConfigSpecContext> = HashMap::new();
-                            let mut clusters: HashMap<String, OtoroshiCtlConfigSpecCluster> = HashMap::new();
-        
-                            for user in config.users.into_iter() {
-                                users.insert(user.name.clone(), user);
-                            }
-                            for context in config.contexts.into_iter() {
-                                contexts.insert(context.name.clone(), context);
-                            }
-                            for cluster in config.clusters.into_iter() {
-                                clusters.insert(cluster.name.clone(), cluster);
-                            }
-                            for user in imported_config.users.into_iter() {
-                                users.insert(user.name.clone(), user);
-                            }
-                            for context in imported_config.contexts.into_iter() {
-                                contexts.insert(context.name.clone(), context);
-                            }
-                            for cluster in imported_config.clusters.into_iter() {
-                                clusters.insert(cluster.name.clone(), cluster);
-                            }
-        
-                            let mut new_config = OtoroshiCtlConfig::empty();
-                            new_config.cloud_apim = config.cloud_apim;
-                            new_config.users = users.into_iter().map(|i| i.1).collect();
-                            new_config.clusters = clusters.into_iter().map(|i| i.1).collect();
-                            new_config.contexts = contexts.into_iter().map(|i| i.1).collect();
-                            if change_current.to_owned() {
-                                new_config.current_context = imported_config.current_context;
-                            } else {
-                                new_config.current_context = config.current_context;
-                            }
-                            OtoroshiCtlConfig::write_current_config(new_config);
-                        }
+                        cli_stdout_printline!("context name '{}' does not exists and cannot be imported", name);
+                        std::process::exit(-1)
                     }
+                }
+            }, 
+            _ => {
+                if overwrite.to_owned() {
+                    OtoroshiCtlConfig::write_current_config(imported_config);
+                } else {
+                    let config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+                    
+                    let mut users: HashMap<String, OtoroshiCtlConfigSpecUser> = HashMap::new();
+                    let mut contexts: HashMap<String, OtoroshiCtlConfigSpecContext> = HashMap::new();
+                    let mut clusters: HashMap<String, OtoroshiCtlConfigSpecCluster> = HashMap::new();
+
+                    for user in config.users.into_iter() {
+                        users.insert(user.name.clone(), user);
+                    }
+                    for context in config.contexts.into_iter() {
+                        contexts.insert(context.name.clone(), context);
+                    }
+                    for cluster in config.clusters.into_iter() {
+                        clusters.insert(cluster.name.clone(), cluster);
+                    }
+                    for user in imported_config.users.into_iter() {
+                        users.insert(user.name.clone(), user);
+                    }
+                    for context in imported_config.contexts.into_iter() {
+                        contexts.insert(context.name.clone(), context);
+                    }
+                    for cluster in imported_config.clusters.into_iter() {
+                        clusters.insert(cluster.name.clone(), cluster);
+                    }
+
+                    let mut new_config = OtoroshiCtlConfig::empty();
+                    new_config.cloud_apim = config.cloud_apim;
+                    new_config.users = users.into_iter().map(|i| i.1).collect();
+                    new_config.clusters = clusters.into_iter().map(|i| i.1).collect();
+                    new_config.contexts = contexts.into_iter().map(|i| i.1).collect();
+                    if change_current.to_owned() {
+                        new_config.current_context = imported_config.current_context;
+                    } else {
+                        new_config.current_context = config.current_context;
+                    }
+                    OtoroshiCtlConfig::write_current_config(new_config);
                 }
             }
         }
