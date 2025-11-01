@@ -220,7 +220,10 @@ pub enum ConfigSubCommand {
         #[arg(long, action = clap::ArgAction::SetTrue)]
         overwrite: bool,
         /// The file or url containing the json object to merge
-        file: String,
+        file: Option<String>,
+        /// Read from stdin
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        stdin: bool,
     },
 }
 

@@ -383,7 +383,7 @@ impl CloudApimCommands {
                         std::process::exit(0)
                     }, 
                     Some(deployment) => {
-                        crate::commands::config::ConfigCommand::import_context(&deployment.link, &overwrite, &change_current, &None, cli_opts.clone()).await;
+                        crate::commands::config::ConfigCommand::import_context(&Some(deployment.link), &overwrite, &change_current, &None, &false, cli_opts.clone()).await;
                         ()
                     }
                 }
