@@ -16,7 +16,7 @@ impl Sidecar {
         tokio::spawn(async move {
             loop {
                 cache.update().await;
-                std::thread::sleep(std::time::Duration::from_secs(60));
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
             }
         });
     }
@@ -47,7 +47,7 @@ impl Sidecar {
         if sidecar_config.clone().spec.inbound.tls.map(|i| i.enabled).unwrap_or(false) {
             Self::start_inbound_https(clip_opts, sidecar_config, dns_port).await;
         } else {
-            Self::start_inbound_https(clip_opts, sidecar_config, dns_port).await;
+            Self::start_inbound_http(clip_opts, sidecar_config, dns_port).await;
         }
     }
 
