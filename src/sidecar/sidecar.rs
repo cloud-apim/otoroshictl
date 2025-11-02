@@ -150,21 +150,11 @@ iptables -t nat -A OTOCTL_DNS_REDIRECT -p udp -j REDIRECT --to-ports {}", uid, d
     }
 
     pub fn uninstall(dry: &Option<bool>) -> () {
-        let iptables_cleanup = "
-iptables -P INPUT ACCEPT
-iptables -P FORWARD ACCEPT
-iptables -P OUTPUT ACCEPT
-iptables -F
-iptables -X
-iptables -Z 
-iptables -t nat -F
-iptables -t nat -X
-iptables -t mangle -F
-iptables -t mangle -X
-iptables -t raw -F
-iptables -t raw -X";
-        let iptables_restore = format!("iptables-restore '{}'", Self::get_backup_file_path());
-        let script = format!("{}\n{}\niptables -t nat --list\n", iptables_cleanup, iptables_restore);
+        let backup = Self::get_backup_file_path();
+        let script = format!(
+            "set +e\n\nif [ -f '{path}' ]; then\n  echo 'restoring iptables from backup: {path}'\n  iptables-restore '{path}'\nelse\n  echo 'no iptables backup found at {path}, performing selective cleanup'\n  CHAINS=(\n    OTOCTL_OUTBOUND_REDIRECT\n    OTOCTL_INBOUND_REDIRECT\n    OTOCTL_DNS_REDIRECT\n    OTOROSHICTL_SIDECAR_OUTBOUND_REDIRECT\n    OTOROSHICTL_SIDECAR_INBOUND_REDIRECT\n    OTOROSHICTL_SIDECAR_DNS_REDIRECT\n  )\n\n  # delete jump rules to our chains in OUTPUT/INPUT for nat table\n  for TABLE in nat; do\n    for HOOK in OUTPUT INPUT PREROUTING; do\n      iptables -t \"$TABLE\" -S \"$HOOK\" 2>/dev/null | while read -r LINE; do\n        for CH in \"${{CHAINS[@]}}\"; do\n          echo \"$LINE\" | grep -q \" -j $CH\" && {{\n            CMD=$(echo \"$LINE\" | sed -E 's/^-A /-D /')\n            echo \"iptables -t $TABLE $CMD\"\n            iptables -t \"$TABLE\" $CMD || true\n          }}\n        done\n      done\n    done\n  done\n\n  # flush and delete our custom chains if they exist\n  for CH in \"${{CHAINS[@]}}\"; do\n    iptables -t nat -F \"$CH\" 2>/dev/null || true\n    iptables -t nat -X \"$CH\" 2>/dev/null || true\n  done\nfi\n\niptables -t nat --list\n",
+            path = backup
+        );
 
         if dry.clone().unwrap_or(false) {
             cli_stdout_printline!("{}", script);
