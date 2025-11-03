@@ -50,7 +50,7 @@ pub struct OtoroshiCtlConfigCloudApim {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct OtoroshiCtlConfig {
-    #[serde(rename = "apiVersion")]
+    #[serde(alias = "apiVersion", )]
     pub api_version: String,
     pub kind: String,
     pub metadata: HashMap<String, String>,
