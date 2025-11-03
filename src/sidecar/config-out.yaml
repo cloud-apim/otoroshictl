@@ -1,4 +1,4 @@
-apiVersion: proxy.otoroshi.io/v1
+api_version: proxy.otoroshi.io/v1
 kind: Sidecar
 metadata:
   name: my-sidecar

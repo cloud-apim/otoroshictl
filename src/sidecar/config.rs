@@ -272,7 +272,7 @@ impl OtoroshiSidecarConfigSpec {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OtoroshiSidecarConfig {
-    #[serde(rename = "apiVersion")]
+    #[serde(alias = "apiVersion")]
     pub api_version: String,
     pub kind: String,
     pub metadata: HashMap<String, String>,
