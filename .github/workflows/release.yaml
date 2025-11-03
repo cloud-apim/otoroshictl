@@ -130,5 +130,6 @@ jobs:
         git commit -am "Update documentation" || echo "No changes to commit"
     - name: Push changes
       run: |
-        git push origin HEAD
+        git pull --rebase origin main
+        git push origin main
       
