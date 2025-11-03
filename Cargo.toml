@@ -1,6 +1,6 @@
 [package]
 name = "otoroshictl"
-version = "0.0.8"
+version = "0.0.9"
 edition = "2021"
 authors = ["mathieu.ancelin@cloud-apim.com"]
 license = "Apache-2.0"
