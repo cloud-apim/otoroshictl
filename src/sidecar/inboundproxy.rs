@@ -217,17 +217,15 @@ impl Svc {
                                                     }
                                                 };
                                                 headers.insert(
-                                                    http::HeaderName::from_str(header_name_out.as_str()).unwrap(), 
+                                                    http::HeaderName::from_str(header_name_out.as_str()).unwrap(),
                                                     http::HeaderValue::from_str(token.as_str()).unwrap(),
                                                 );
                                             }
                                         };
                                     }
                                 };
-                                ()
                             } else {
                                 headers.insert(http::HeaderName::from_str(header_name_out.as_str()).unwrap(), state.to_owned());
-                                ()
                             }
                         }
                     };
@@ -312,17 +310,15 @@ impl Svc {
                                                                     }
                                                                 };
                                                                 headers.insert(
-                                                                    http::HeaderName::from_str(header_name_out.as_str()).unwrap(), 
+                                                                    http::HeaderName::from_str(header_name_out.as_str()).unwrap(),
                                                                     http::HeaderValue::from_str(token.as_str()).unwrap(),
                                                                 );
                                                             }
                                                         };
                                                     }
                                                 };
-                                                ()
                                             } else {
                                                 headers.insert(http::HeaderName::from_str(header_name_out.as_str()).unwrap(), state.to_owned());
-                                                ()
                                             }
                                         }
                                     };

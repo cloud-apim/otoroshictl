@@ -20,6 +20,12 @@ pub struct BytePacketBuffer {
     pub pos: usize,
 }
 
+impl Default for BytePacketBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BytePacketBuffer {
     pub fn new() -> BytePacketBuffer {
         BytePacketBuffer {
@@ -65,7 +71,7 @@ impl BytePacketBuffer {
         if start + len >= 512 {
             return Err("get_range: End of buffer".into());
         }
-        Ok(&self.buf[start..start + len as usize])
+        Ok(&self.buf[start..start + len])
     }
 
     fn read_u16(&mut self) -> Result<u16> {
@@ -78,7 +84,7 @@ impl BytePacketBuffer {
         let res = ((self.read()? as u32) << 24)
             | ((self.read()? as u32) << 16)
             | ((self.read()? as u32) << 8)
-            | ((self.read()? as u32) << 0);
+            | (self.read()? as u32);
 
         Ok(res)
     }
@@ -169,7 +175,7 @@ impl BytePacketBuffer {
         self.write(((val >> 24) & 0xFF) as u8)?;
         self.write(((val >> 16) & 0xFF) as u8)?;
         self.write(((val >> 8) & 0xFF) as u8)?;
-        self.write(((val >> 0) & 0xFF) as u8)?;
+        self.write((val & 0xFF) as u8)?;
 
         Ok(())
     }
@@ -251,6 +257,12 @@ pub struct DnsHeader {
     pub resource_entries: u16,      // 16 bits
 }
 
+impl Default for DnsHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DnsHeader {
     pub fn new() -> DnsHeader {
         DnsHeader {
@@ -310,7 +322,7 @@ impl DnsHeader {
                 | ((self.truncated_message as u8) << 1)
                 | ((self.authoritative_answer as u8) << 2)
                 | (self.opcode << 3)
-                | ((self.response as u8) << 7) as u8,
+                | ((self.response as u8) << 7),
         )?;
 
         buffer.write_u8(
@@ -449,7 +461,7 @@ impl DnsRecord {
                     ((raw_addr >> 24) & 0xFF) as u8,
                     ((raw_addr >> 16) & 0xFF) as u8,
                     ((raw_addr >> 8) & 0xFF) as u8,
-                    ((raw_addr >> 0) & 0xFF) as u8,
+                    (raw_addr & 0xFF) as u8,
                 );
 
                 Ok(DnsRecord::A { domain, addr, ttl })
@@ -461,13 +473,13 @@ impl DnsRecord {
                 let raw_addr4 = buffer.read_u32()?;
                 let addr = Ipv6Addr::new(
                     ((raw_addr1 >> 16) & 0xFFFF) as u16,
-                    ((raw_addr1 >> 0) & 0xFFFF) as u16,
+                    (raw_addr1 & 0xFFFF) as u16,
                     ((raw_addr2 >> 16) & 0xFFFF) as u16,
-                    ((raw_addr2 >> 0) & 0xFFFF) as u16,
+                    (raw_addr2 & 0xFFFF) as u16,
                     ((raw_addr3 >> 16) & 0xFFFF) as u16,
-                    ((raw_addr3 >> 0) & 0xFFFF) as u16,
+                    (raw_addr3 & 0xFFFF) as u16,
                     ((raw_addr4 >> 16) & 0xFFFF) as u16,
-                    ((raw_addr4 >> 0) & 0xFFFF) as u16,
+                    (raw_addr4 & 0xFFFF) as u16,
                 );
 
                 Ok(DnsRecord::AAAA { domain, addr, ttl })
@@ -627,6 +639,12 @@ pub struct DnsPacket {
     pub resources: Vec<DnsRecord>,
 }
 
+impl Default for DnsPacket {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DnsPacket {
     pub fn new() -> DnsPacket {
         DnsPacket {
@@ -739,8 +757,7 @@ impl DnsPacket {
                         DnsRecord::A { domain, addr, .. } if domain == host => Some(addr),
                         _ => None,
                     })
-            })
-            .map(|addr| *addr)
+            }).copied()
             // Finally, pick the first valid entry
             .next()
     }
@@ -827,7 +844,7 @@ async fn recursive_lookup(qname: &str, i_ns_host: Ipv4Addr, i_ns_port: u16, qtyp
         // Here we go down the rabbit hole by starting _another_ lookup sequence in the
         // midst of our current one. Hopefully, this will give us the IP of an appropriate
         // name server.
-        let recursive_response = recursive_lookup(&new_ns_name, ns_addr, ns_port, QueryType::A).await.unwrap();
+        let recursive_response = recursive_lookup(new_ns_name, ns_addr, ns_port, QueryType::A).await.unwrap();
 
         // Finally, we pick a random ip from the result, and restart the loop. If no such
         // record is available, we again return the last result we got.
@@ -966,13 +983,11 @@ impl DnsServer {
         let socket = UdpSocket::bind(("0.0.0.0", port)).await.unwrap();
         let (conf, _opts) = system_conf::read_system_conf().unwrap();
         let local_machines_nses: Vec<(Ipv4Addr, u16)> = conf.name_servers()
-            .into_iter()
+            .iter()
             .filter(|i| i.protocol == Protocol::Udp)
             .filter(|i| i.socket_addr.is_ipv4())
             .map(|i| i.socket_addr.to_string())
-            .filter(|i| {
-                !(i.to_string() == self_address)
-            })
+            .filter(|i| *i != self_address)
             .map(|i| {
                 let parts: Vec<&str> = i.split(":").collect();
                 let addr = parts[0].parse::<Ipv4Addr>().unwrap();

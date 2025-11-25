@@ -24,9 +24,7 @@ async fn main() {
 
     let cli_opts: CliOpts = CliOpts::build_from_command_line();
 
-    let def_log = if cli_opts.verbose {
-        "debug"
-    } else if cfg!(debug_assertions) {
+    let def_log = if cli_opts.verbose || cfg!(debug_assertions) {
         "debug"
     } else {
         "info"
@@ -72,7 +70,7 @@ async fn main() {
                 SidecarSubCommand::GenerateConfig { file } => {
                     let path = file.clone().unwrap_or("./sidecar.yaml".to_string());
                     let config = OtoroshiSidecarConfig::default();
-                    let _ = fs::write(path.clone(), serde_yaml::to_string(&config).unwrap()).unwrap();
+                    fs::write(path.clone(), serde_yaml::to_string(&config).unwrap()).unwrap();
                     cli_stdout_printline!("new sidecar config. file generated at {}", path.clone());
                     std::process::exit(0)
                 },
@@ -128,13 +126,13 @@ async fn main() {
         },
         Some(Commands::CloudApim { command }) => {
             match command {
-                CloudApimSubCommand::Login {} => {
+                CloudApimSubCommand::Login => {
                     crate::commands::cloud_apim::CloudApimCommands::login(cli_opts).await;
                 },
-                CloudApimSubCommand::Logout {} => {
+                CloudApimSubCommand::Logout => {
                     crate::commands::cloud_apim::CloudApimCommands::logout(cli_opts).await;
                 },
-                CloudApimSubCommand::List {} => {
+                CloudApimSubCommand::List => {
                     crate::commands::cloud_apim::CloudApimCommands::display_deployments(cli_opts).await;
                 },
                 CloudApimSubCommand::Link { name } => {

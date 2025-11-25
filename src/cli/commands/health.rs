@@ -49,7 +49,7 @@ impl HealthCommand {
         }
     }
 
-    fn default_display(health: OtoroshiHealth) -> () {
+    fn default_display(health: OtoroshiHealth) {
         let table = vec![
             vec![  
                 Self::healthy_cell(health.otoroshi),
@@ -77,7 +77,7 @@ impl HealthCommand {
         let _ = print_stdout(table);
     }
 
-    pub async fn display(cli_opts: CliOpts, _command: &Commands) -> () {
+    pub async fn display(cli_opts: CliOpts, _command: &Commands) {
         match Otoroshi::get_health(cli_opts.clone()).await {
             None => {
                 cli_stderr_printline!("error while fetching health");

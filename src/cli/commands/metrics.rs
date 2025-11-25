@@ -13,7 +13,7 @@ pub struct OtoroshiMetrics {
 pub struct MetricsCommand {}
 
 impl MetricsCommand {
-    fn default_display(vec: Vec<TableResource>, columns_raw: Vec<String>) -> () {
+    fn default_display(vec: Vec<TableResource>, columns_raw: Vec<String>) {
         if columns_raw.is_empty() {
             TableHelper::display_table_of_resources_with_custom_columns(vec, vec![
                 "name".to_string(),
@@ -46,20 +46,20 @@ impl MetricsCommand {
         }
     }
 
-    pub async fn display(cli_opts: CliOpts, _command: &Commands, columns: Vec<String>, filter: Option<String>) -> () {
+    pub async fn display(cli_opts: CliOpts, _command: &Commands, columns: Vec<String>, filter: Option<String>) {
         match Otoroshi::get_metrics(cli_opts.clone()).await {
             None => {
                 cli_stderr_printline!("error while fetching cluster metrics");
                 std::process::exit(-1)
             },
             Some(metrics) => {
-                let filters: Option<Vec<String>> = filter.map(|f| f.split(",").into_iter().map(|i| i.to_string()).collect());
-                let vec: Vec<TableResource> = metrics.body.as_array().unwrap().into_iter().filter(|item| {
+                let filters: Option<Vec<String>> = filter.map(|f| f.split(',').map(|i| i.to_string()).collect());
+                let vec: Vec<TableResource> = metrics.body.as_array().unwrap().iter().filter(|item| {
                     match &filters {
                         None => true,
                         Some(filters) => {
                             let name = item.as_object().unwrap().get("name").unwrap().as_str().unwrap();
-                            filters.into_iter().find(|filter| name.starts_with(filter.as_str())).is_some()
+                            filters.iter().any(|filter| name.starts_with(filter.as_str()))
                         }
                     }
                 }).map(|item| {

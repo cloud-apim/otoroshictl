@@ -21,16 +21,16 @@ pub struct VersionCommand {}
 
 impl VersionCommand {
 
-    fn default_display(version: OtoroshiVersion) -> () {
+    fn default_display(version: OtoroshiVersion) {
         let table = vec![
-            vec![  
+            vec![
                 version.version.cell(),
                 version.major.cell(),
                 version.minor.cell(),
                 version.patch.cell(),
-                version.build.map(|v| format!("{}", v)).unwrap_or("".to_string()).cell(),
-                version.suffix.map(|v| format!("{}", v)).unwrap_or("".to_string()).cell(),
-                version.suffix_version.map(|v| format!("{}", v)).unwrap_or("".to_string()).cell(),
+                version.build.map(|v| v.to_string()).unwrap_or_default().cell(),
+                version.suffix.map(|v| v.to_string()).unwrap_or_default().cell(),
+                version.suffix_version.map(|v| v.to_string()).unwrap_or_default().cell(),
             ]
         ]
         .table()
@@ -46,7 +46,7 @@ impl VersionCommand {
         let _ = print_stdout(table);
     }
 
-    pub async fn display(cli_opts: CliOpts, _command: &Commands) -> () {
+    pub async fn display(cli_opts: CliOpts, _command: &Commands) {
         match Otoroshi::get_version(cli_opts.clone()).await {
             None => {
                 cli_stderr_printline!("error while fetching version");

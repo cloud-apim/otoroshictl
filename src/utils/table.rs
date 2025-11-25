@@ -30,10 +30,10 @@ impl TableHelper {
         }
     }
 
-    pub fn display_table_of_resources_with_custom_columns(vec: Vec<TableResource>, columns: Vec<String>) -> () {
+    pub fn display_table_of_resources_with_custom_columns(vec: Vec<TableResource>, columns: Vec<String>) {
         let table =  vec.into_iter().map(|item| {
             let value = item.raw.as_object().unwrap(); 
-            let values: Vec<CellStruct> = columns.to_vec().into_iter().map(|name| {
+            let values: Vec<CellStruct> = columns.iter().cloned().map(|name| {
                 if name.contains(".") {
                     let path: Vec<String> = name.split(".").map(|i| i.to_string()).collect();
                     let last_name: String = path.last().unwrap().to_string();
@@ -57,7 +57,7 @@ impl TableHelper {
         let _ = print_stdout(table);
     }
 
-    pub fn display_table_of_resources_default(vec: Vec<TableResource>) -> () {
+    pub fn display_table_of_resources_default(vec: Vec<TableResource>) {
         Self::display_table_of_resources_with_custom_columns(vec, vec![
             "id".to_string(),
             "name".to_string(),

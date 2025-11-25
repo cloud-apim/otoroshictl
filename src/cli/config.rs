@@ -77,9 +77,7 @@ impl OtoroshiCtlConfig {
     }
 
     pub async fn read_from(path: &String) -> Result<OtoroshiCtlConfig, String> {
-        if path.starts_with("http://") {
-            Self::read_from_url(path, false).await
-        } else if path.starts_with("https://") {
+        if path.starts_with("http://") || path.starts_with("https://") {
             Self::read_from_url(path, false).await
         } else {
             Self::read_from_file(path)
@@ -95,7 +93,7 @@ impl OtoroshiCtlConfig {
     }
 
     pub fn read_from_string(content: &String) -> Result<OtoroshiCtlConfig, String> {
-        serde_yaml::from_str::<OtoroshiCtlConfig>(&content).map_err(|e| e.to_string())
+        serde_yaml::from_str::<OtoroshiCtlConfig>(content).map_err(|e| e.to_string())
     }
 
     pub fn read_from_json_value(content: serde_json::Value) -> Result<OtoroshiCtlConfig, String> {
@@ -106,8 +104,8 @@ impl OtoroshiCtlConfig {
     pub async fn read_from_url(url: &String, _tls: bool) -> Result<OtoroshiCtlConfig, String> {
         match crate::utils::http::Http::get(url).await {
             Err(err) => {
-                std::result::Result::Err(format!("{}", err))
-            }, 
+                std::result::Result::Err(err.to_string())
+            },
             Ok(content) => {
                 match content.kind {
                     HttpContentKind::JSON => serde_json::from_slice::<OtoroshiCtlConfig>(&content.content).map_err(|e| e.to_string()),
@@ -174,7 +172,7 @@ impl OtoroshiCtlConfig {
 
     pub async fn get_current_config(opts: CliOpts) -> OtoroshiCtlConfig {
         match std::env::var("OTOROSHICTL_USE_ENV_CONFIG") {
-            Ok(v) if v == "true".to_string() => {
+            Ok(v) if v == "true" => {
                 let hostname = std::env::var("OTOROSHICTL_CLUSTER_HOSTNAME").unwrap();
                 let port: u16 = std::env::var("OTOROSHICTL_CLUSTER_PORT").unwrap_or("443".to_string()).parse::<u16>().unwrap_or(443);
                 let tls: bool = std::env::var("OTOROSHICTL_CLUSTER_TLS").unwrap_or("true".to_string()).parse::<bool>().unwrap_or(true);
@@ -207,7 +205,7 @@ impl OtoroshiCtlConfig {
 
                 let mut tmp = OtoroshiCtlConfig::empty();
                 tmp.current_context = "env".to_string();
-                tmp.users.push(OtoroshiCtlConfigSpecUser { name: "env".to_string(), client_id: client_id, client_secret: client_secret, health_key: health_key });
+                tmp.users.push(OtoroshiCtlConfigSpecUser { name: "env".to_string(), client_id, client_secret, health_key });
                 
                 tmp.clusters.push(OtoroshiCtlConfigSpecCluster { 
                     name: "env".to_string(), 
@@ -229,7 +227,7 @@ impl OtoroshiCtlConfig {
                     (Some(hostname), Some(port), Some(client_id), Some(client_secret), health_key) => {
                         let mut tmp = OtoroshiCtlConfig::empty();
                         tmp.current_context = "tmp".to_string();
-                        tmp.users.push(OtoroshiCtlConfigSpecUser { name: "tmp".to_string(), client_id: client_id, client_secret: client_secret, health_key: health_key });
+                        tmp.users.push(OtoroshiCtlConfigSpecUser { name: "tmp".to_string(), client_id, client_secret, health_key });
                         match (opts.otoroshi_cluster_cert_location, opts.otoroshi_cluster_key_location, opts.otoroshi_cluster_ca_location) {
                             (Some(cert), Some(key), Some(ca)) => {
                                 tmp.clusters.push(OtoroshiCtlConfigSpecCluster { 
@@ -298,8 +296,8 @@ impl OtoroshiCtlConfig {
         }
     }
 
-    pub fn write_current_config(cfg: OtoroshiCtlConfig) -> () {
-        let _ = confy::store("io.otoroshi.otoroshictl", Some("config"), cfg).unwrap();
+    pub fn write_current_config(cfg: OtoroshiCtlConfig) {
+        confy::store("io.otoroshi.otoroshictl", Some("config"), cfg).unwrap();
     }
 
     pub fn default_instance() -> OtoroshiCtlConfig {

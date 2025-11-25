@@ -34,9 +34,9 @@ impl KubeEntity {
         metadata.insert("name".to_string(), name);
         KubeEntity {
             apiVersion: "proxy.otoroshi.io/v1".to_string(),
-            kind: kind, 
-            spec: spec,
-            metadata: metadata,
+            kind,
+            spec,
+            metadata,
         }
     }
 }
@@ -56,7 +56,7 @@ impl ResourcesCommand {
         if res.status == 201 {
             cli_stdout_printline!("  - {}: created", name);
         } else if res.status == 200 {
-            match res.headers.get(&"otoroshi-entity-updated".to_string()) {
+            match res.headers.get("otoroshi-entity-updated") {
                 Some(v) if v.as_str() == "true" => cli_stdout_printline!("  - {}: updated", name),
                 Some(v) if v.as_str() == "false" => cli_stdout_printline!("  - {}: unchanged", name),
                 _ => cli_stdout_printline!("  - {}: updated", name),
@@ -90,7 +90,7 @@ impl ResourcesCommand {
         if res.status == 201 {
             cli_stdout_printline!("  - {}: created", name);
         } else if res.status == 200 {
-            match res.headers.get(&"otoroshi-entity-updated".to_string()) {
+            match res.headers.get("otoroshi-entity-updated") {
                 Some(v) if v.as_str() == "true" => cli_stdout_printline!("  - {}: updated", name),
                 Some(v) if v.as_str() == "false" => cli_stdout_printline!("  - {}: unchanged", name),
                 _ => cli_stdout_printline!("  - {}: updated", name),
@@ -115,9 +115,9 @@ impl ResourcesCommand {
 
     async fn handle_yaml_kube_entity(json: serde_yaml::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
         let spec = json.get("spec").unwrap();
-        let id = EntityHelper::extract_yaml_entity_id(&spec).unwrap();
+        let id = EntityHelper::extract_yaml_entity_id(spec).unwrap();
         let metadata = json.get("metadata").unwrap();
-        let name = metadata.get("name").map(|i| i.as_str().unwrap().to_string()).or_else(|| EntityHelper::extract_yaml_entity_name(&spec)).unwrap();
+        let name = metadata.get("name").map(|i| i.as_str().unwrap().to_string()).or_else(|| EntityHelper::extract_yaml_entity_name(spec)).unwrap();
         let kind = json.get("kind").unwrap().as_str().unwrap().to_lowercase();
         let final_resource_name: String = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind).unwrap().plural_name;
         let content = serde_yaml::to_string(spec).unwrap();
@@ -134,9 +134,9 @@ impl ResourcesCommand {
 
     async fn delete_yaml_kube_entity(json: serde_yaml::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
         let spec = json.get("spec").unwrap();
-        let id = EntityHelper::extract_yaml_entity_id(&spec).unwrap();
+        let id = EntityHelper::extract_yaml_entity_id(spec).unwrap();
         let metadata = json.get("metadata").unwrap();
-        let name = metadata.get("name").map(|i| i.as_str().unwrap().to_string()).or_else(|| EntityHelper::extract_yaml_entity_name(&spec)).unwrap();
+        let name = metadata.get("name").map(|i| i.as_str().unwrap().to_string()).or_else(|| EntityHelper::extract_yaml_entity_name(spec)).unwrap();
         let kind = json.get("kind").unwrap().as_str().unwrap().to_lowercase();
         let final_resource_name: String = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind).unwrap().plural_name;
         let res = Otoroshi::delete_one_resource(final_resource_name, id, cli_opts.clone()).await;
@@ -420,7 +420,7 @@ impl ResourcesCommand {
         res.to_vec()
     }
 
-    fn display_table_of_routes(vec: Vec<TableResource>) -> () {
+    fn display_table_of_routes(vec: Vec<TableResource>) {
         TableHelper::display_table_of_resources_with_custom_columns(vec, vec![
             "id".to_string(),
             "name".to_string(),
@@ -433,7 +433,7 @@ impl ResourcesCommand {
         ])
     }
 
-    fn display_table_of_resources(kind: String, vec: Vec<TableResource>, columns_raw: Vec<String>) -> () {
+    fn display_table_of_resources(kind: String, vec: Vec<TableResource>, columns_raw: Vec<String>) {
         if columns_raw.is_empty() {
             match kind.as_str() {
                 "route" => Self::display_table_of_routes(vec),
@@ -456,7 +456,7 @@ impl ResourcesCommand {
         entity_with_kind
     }
 
-    fn run_watch(path: String, dir: bool, recursive: bool, cli_opts: CliOpts) -> () {
+    fn run_watch(path: String, dir: bool, recursive: bool, cli_opts: CliOpts) {
         let path_err = path.clone();
         let mut watcher = notify::recommended_watcher(move |res| {
             match res {
@@ -716,19 +716,17 @@ spec:
                                                         }
                                                     },
                                                     _ => {
-                                                        let mut vec = Vec::new();
-                                                        vec.push(TableResource {
+                                                        let vec = vec![TableResource {
                                                             raw: raw_resource.body,
-                                                        });
+                                                        }];
                                                         Self::display_table_of_resources(kind.to_string(), vec, columns.to_vec())
                                                     },
                                                 }
                                             },
                                             _ => {
-                                                let mut vec = Vec::new();
-                                                vec.push(TableResource {
+                                                let vec = vec![TableResource {
                                                     raw: raw_resource.body,
-                                                });
+                                                }];
                                                 Self::display_table_of_resources(kind.to_string(), vec, columns.to_vec())
                                             },
                                         };
@@ -756,8 +754,7 @@ spec:
                                                         if kube.unwrap_or(true) {
                                                             let kube_entities: Vec<KubeEntity> = raw_resources.body.into_iter().map(|res_body| {
                                                                 let res_name = EntityHelper::extract_json_entity_name(&res_body).unwrap();
-                                                                let kube_res = KubeEntity::new(res_kind.clone(), res_name, res_body);
-                                                                kube_res
+                                                                KubeEntity::new(res_kind.clone(), res_name, res_body)
                                                             }).collect();
                                                             cli_stdout_printline!("{}", serde_yaml::to_string(&kube_entities).unwrap())
                                                         } else {
@@ -812,9 +809,7 @@ spec:
                                 failed_results.push(id.to_string());
                             }
                         }
-                        if failed_results.is_empty() {
-                            ()
-                        } else {
+                        if !failed_results.is_empty() {
                             let print_ids: Vec<String> = failed_results.into_iter().map(|s| format!("  - {}", s)).collect();
                             cli_stdout_printline!("failed to delete the following {}\n", final_resource_name);
                             cli_stdout_printline!("{}\n", print_ids.join("\n"))
@@ -834,11 +829,9 @@ spec:
                             Some(file) => {
                                 if file.starts_with("http://") || file.starts_with("https://") {
                                     if file.starts_with("http://") {
-                                        Self::delete_url_http(file.to_owned(), cli_opts.clone()).await
+                                        Self::delete_url_http(file.to_owned(), cli_opts.clone()).await;
                                     } else if file.starts_with("https://") {
-                                        Self::delete_url_https(file.to_owned(), cli_opts.clone()).await
-                                    } else {
-                                        ()
+                                        Self::delete_url_https(file.to_owned(), cli_opts.clone()).await;
                                     }
                                 } else {
                                     Self::delete_files(vec![PathBuf::from(file.to_owned())], cli_opts.clone()).await
@@ -871,12 +864,10 @@ spec:
                                     }
                                     let id: String = EntityHelper::extract_json_entity_id(&json).unwrap();
                                     let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id, serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
-                                    ()
                                 } else {
                                     let json = serde_json::from_str::<serde_json::Value>(&content).unwrap();
                                     let id = EntityHelper::extract_json_entity_id(&json).unwrap();
                                     let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id, content, cli_opts.clone()).await;
-                                    ()
                                 }
                             }
                         }
@@ -888,7 +879,7 @@ spec:
                                 let edited = if *stdin {
                                     std::io::read_to_string(std::io::stdin()).unwrap()
                                 } else {
-                                    edit::edit(to_edit.to_string()).unwrap_or(to_edit.to_string())
+                                    edit::edit(&to_edit).unwrap_or(to_edit.clone())
                                 };
                                 let is_yaml = !edited.trim().starts_with("{");
                                 if is_yaml {
@@ -904,7 +895,6 @@ spec:
                                     let id: String = EntityHelper::extract_json_entity_id(&json).unwrap();
                                     let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), edited, cli_opts.clone()).await;
                                 }
-                                ()
                             } else {
                                 let edited = input.clone().unwrap();
                                 let is_yaml = !edited.trim().starts_with("{");
@@ -920,32 +910,30 @@ spec:
                                     let json = serde_json::from_str(&edited).unwrap();
                                     let id = EntityHelper::extract_json_entity_id(&json).unwrap();
                                     let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), edited, cli_opts.clone()).await;
-                                    ()
                                 }
                             }
                         } else {
-                            let serie: String = data.into_iter()
-                                .filter(|str| str.contains("="))
+                            let serie: String = data.iter()
+                                .filter(|str| str.contains('='))
                                 .map(|str| {
-                                    let parts: Vec<String> = str.split("=").map(|s| s.to_string()).collect();
-                                    let path = parts.get(0).unwrap();
+                                    let parts: Vec<String> = str.split('=').map(|s| s.to_string()).collect();
+                                    let path = parts.first().unwrap();
                                     let mut value = parts.get(1).unwrap().to_string();
-                                    if value.starts_with("'") && value.ends_with("'") {
-                                        value = value.strip_suffix("'").unwrap().strip_prefix("'").unwrap().to_string();
+                                    if value.starts_with('\'') && value.ends_with('\'') {
+                                        value = value.strip_suffix('\'').unwrap().strip_prefix('\'').unwrap().to_string();
                                     };
-                                    if value.starts_with("\"") && value.ends_with("\"") {
-                                        value = value.strip_suffix("\"").unwrap().strip_prefix("\"").unwrap().to_string();
+                                    if value.starts_with('"') && value.ends_with('"') {
+                                        value = value.strip_suffix('"').unwrap().strip_prefix('"').unwrap().to_string();
                                     };
                                     serde_json::to_string(&serde_json::json!({ "path": path, "value": value })).unwrap()
                                 })
                                 .collect::<Vec<String>>()
                                 .join(",");
                             let _ = Otoroshi::create_one_resource_with_content_type(final_resource_name.to_string(), format!("[{}]", serie), "application/json+oto-patch".to_string(), cli_opts.clone()).await;
-                            ()
                         }
                     }
                 }
-            }, 
+            },
             ResourcesSubCommand::Edit { resource, id, file, data, input, stdin } => {
                 let final_resource_name: String = if resource.ends_with("s") {
                     resource.to_string()
@@ -970,7 +958,6 @@ spec:
                                     let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
                                 } else {
                                     let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), content, cli_opts.clone()).await;
-                                    ()
                                 }
                             }
                         }
@@ -988,7 +975,7 @@ spec:
                                         let edited = if *stdin {
                                             std::io::read_to_string(std::io::stdin()).unwrap()
                                         } else {
-                                            edit::edit(to_edit.to_string()).unwrap_or(to_edit.to_string())
+                                            edit::edit(&to_edit).unwrap_or(to_edit.clone())
                                         };
                                         let is_yaml = !edited.trim().starts_with("{");
                                         if is_yaml {
@@ -1000,7 +987,6 @@ spec:
                                             let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
                                         } else {
                                             let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), edited, cli_opts.clone()).await;
-                                            ()
                                         }
                                     } else {
                                         let edited = input.clone().unwrap();
@@ -1014,34 +1000,32 @@ spec:
                                             let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
                                         } else {
                                             let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), edited, cli_opts.clone()).await;
-                                            ()
                                         }
                                     }
                                 } else {
-                                    let serie: String = data.into_iter()
-                                        .filter(|str| str.contains("="))
+                                    let serie: String = data.iter()
+                                        .filter(|str| str.contains('='))
                                         .map(|str| {
-                                            let parts: Vec<String> = str.split("=").map(|s| s.to_string()).collect();
-                                            let path = parts.get(0).unwrap();
+                                            let parts: Vec<String> = str.split('=').map(|s| s.to_string()).collect();
+                                            let path = parts.first().unwrap();
                                             let mut value = parts.get(1).unwrap().to_string();
-                                            if value.starts_with("'") && value.ends_with("'") {
-                                                value = value.strip_suffix("'").unwrap().strip_prefix("'").unwrap().to_string();
+                                            if value.starts_with('\'') && value.ends_with('\'') {
+                                                value = value.strip_suffix('\'').unwrap().strip_prefix('\'').unwrap().to_string();
                                             };
-                                            if value.starts_with("\"") && value.ends_with("\"") {
-                                                value = value.strip_suffix("\"").unwrap().strip_prefix("\"").unwrap().to_string();
+                                            if value.starts_with('"') && value.ends_with('"') {
+                                                value = value.strip_suffix('"').unwrap().strip_prefix('"').unwrap().to_string();
                                             };
                                             serde_json::to_string(&serde_json::json!({ "path": path, "value": value })).unwrap()
                                         })
                                         .collect::<Vec<String>>()
                                         .join(",");
                                     let _ = Otoroshi::upsert_one_resource_with_content_type(final_resource_name.to_string(), id.to_string(), format!("[{}]", serie), "application/json+oto-patch".to_string(), cli_opts.clone()).await;
-                                    ()
                                 }
                             }
                         }
                     }
                 }
-            }, 
+            },
             ResourcesSubCommand::Patch { resource, id, merge, file, data, stdin } => {
                 // TODO: handle json patch
                 let final_resource_name: String = if resource.ends_with("s") {
@@ -1062,7 +1046,7 @@ spec:
                                         std::io::read_to_string(std::io::stdin()).unwrap()
                                     } else {
                                         match merge {
-                                            None => edit::edit("".to_string()).unwrap_or("".to_string()),
+                                            None => edit::edit("").unwrap_or_default(),
                                             Some(merge) => merge.to_string()
                                         }
                                     }
@@ -1082,31 +1066,29 @@ spec:
                                 doc.merge(&input);
                                 let edited = serde_json::to_string(&doc).unwrap();
                                 let _ = Otoroshi::upsert_one_resource(final_resource_name.to_string(), id.to_string(), edited, cli_opts.clone()).await;
-                                ()
                             }
                         } else {
-                            let serie: String = data.into_iter()
-                                .filter(|str| str.contains("="))
+                            let serie: String = data.iter()
+                                .filter(|str| str.contains('='))
                                 .map(|str| {
-                                    let parts: Vec<String> = str.split("=").map(|s| s.to_string()).collect();
-                                    let path = parts.get(0).unwrap();
+                                    let parts: Vec<String> = str.split('=').map(|s| s.to_string()).collect();
+                                    let path = parts.first().unwrap();
                                     let mut value = parts.get(1).unwrap().to_string();
-                                    if value.starts_with("'") && value.ends_with("'") {
-                                        value = value.strip_suffix("'").unwrap().strip_prefix("'").unwrap().to_string();
+                                    if value.starts_with('\'') && value.ends_with('\'') {
+                                        value = value.strip_suffix('\'').unwrap().strip_prefix('\'').unwrap().to_string();
                                     };
-                                    if value.starts_with("\"") && value.ends_with("\"") {
-                                        value = value.strip_suffix("\"").unwrap().strip_prefix("\"").unwrap().to_string();
+                                    if value.starts_with('"') && value.ends_with('"') {
+                                        value = value.strip_suffix('"').unwrap().strip_prefix('"').unwrap().to_string();
                                     };
                                     serde_json::to_string(&serde_json::json!({ "path": path, "value": value })).unwrap()
                                 })
                                 .collect::<Vec<String>>()
                                 .join(",");
                             let _ = Otoroshi::upsert_one_resource_with_content_type(final_resource_name.to_string(), id.to_string(), format!("[{}]", serie), "application/json+oto-patch".to_string(), cli_opts.clone()).await;
-                            ()
                         }
                     }
                 }
-            }, 
+            },
             ResourcesSubCommand::Apply { file, directory, recursive, watch  } => {
                 match file {
                     None => {
@@ -1118,29 +1100,25 @@ spec:
                                 if watch.unwrap_or(false) {
                                     Self::run_watch(directory.as_os_str().to_string_lossy().to_string(), true, recursive.unwrap_or(false), cli_opts.clone());
                                 }
-                                ()
                             }
                         }
                     },
                     Some(file) => {
                         if file.starts_with("http://") || file.starts_with("https://") {
                             if file.starts_with("http://") {
-                                Self::sync_url_http(file.to_owned(), cli_opts.clone()).await
+                                Self::sync_url_http(file.to_owned(), cli_opts.clone()).await;
                             } else if file.starts_with("https://") {
-                                Self::sync_url_https(file.to_owned(), cli_opts.clone()).await
-                            } else {
-                                ()
+                                Self::sync_url_https(file.to_owned(), cli_opts.clone()).await;
                             }
                         } else {
                             Self::sync_files(vec![PathBuf::from(file.to_owned())], cli_opts.clone()).await;
                             if watch.unwrap_or(false) {
                                 Self::run_watch(file.to_string(), false, recursive.unwrap_or(false), cli_opts.clone());
                             }
-                            ()
                         }
                     }
                 }
-            }, 
+            },
             ResourcesSubCommand::Import { file, nd_json } => {
                 let cconfig =  crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts).await.to_connection_config();
                 let content = crate::utils::file::FileHelper::get_content_string(file).await;
@@ -1189,7 +1167,7 @@ spec:
                                         if cli_opts.clone().ouput.filter(|v| *v == "yaml").is_some() && kube.unwrap_or(true) {
                                             let kube_entity = KubeEntity::new(resource.clone().kind, entity_name, entity);
                                             std::fs::write(
-                                                directory.join(name2.to_string()).join(format!("{}.yaml", entity_id.to_string())), 
+                                                directory.join(&name2).join(format!("{}.yaml", entity_id)),
                                                 serde_yaml::to_string(&kube_entity).unwrap()
                                             ).unwrap();
                                         } else if cli_opts.clone().ouput.filter(|v| *v == "yaml").is_some() && !kube.unwrap_or(true) {
@@ -1198,7 +1176,7 @@ spec:
                                             let mut entity_with_kind = entity.clone();
                                             entity_with_kind.merge(&serde_json::Value::Object(kind));
                                             std::fs::write(
-                                                directory.join(name2.to_string()).join(format!("{}.yaml", entity_id.to_string())), 
+                                                directory.join(&name2).join(format!("{}.yaml", entity_id)),
                                                 serde_yaml::to_string(&entity_with_kind).unwrap()
                                             ).unwrap();
                                         } else {
@@ -1207,7 +1185,7 @@ spec:
                                             let mut entity_with_kind = entity.clone();
                                             entity_with_kind.merge(&serde_json::Value::Object(kind));
                                             std::fs::write(
-                                                directory.join(name2.to_string()).join(format!("{}.json", entity_id.to_string())), 
+                                                directory.join(&name2).join(format!("{}.json", entity_id)),
                                                 serde_json::to_string_pretty(&entity_with_kind).unwrap()
                                             ).unwrap();
                                         }
@@ -1221,7 +1199,7 @@ spec:
                                     }).collect();
                                     let doc = serde_json::Value::Array(kinded_docs);
                                     std::fs::write(
-                                        directory.join(format!("{}.json", name.to_string())), 
+                                        directory.join(format!("{}.json", name)),
                                         serde_json::to_string_pretty(&doc).unwrap()
                                     ).unwrap();
                                 }

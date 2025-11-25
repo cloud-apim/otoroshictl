@@ -12,7 +12,7 @@ pub struct Sidecar {}
 
 impl Sidecar {
 
-    fn update_cache(cache: Arc<SidecarCache>) -> () {
+    fn update_cache(cache: Arc<SidecarCache>) {
         tokio::spawn(async move {
             loop {
                 cache.update().await;
@@ -21,7 +21,7 @@ impl Sidecar {
         });
     }
 
-    pub fn how_to() -> () {
+    pub fn how_to() {
         let mut logger = paris::Logger::new();
 
         logger.log("");
@@ -57,7 +57,7 @@ impl Sidecar {
 
         Self::update_cache(cache.clone());
 
-        let dns = crate::sidecar::dns::DnsServer::start(dns_port.clone(), sidecar_config.clone());
+        let dns = crate::sidecar::dns::DnsServer::start(*dns_port, sidecar_config.clone());
         let outbound = crate::sidecar::outboundproxy::OutboundProxy::start(clip_opts.clone(), sidecar_config.clone(), cache.clone());
         let inbound = crate::sidecar::inboundproxy::InboundProxy::start_http(sidecar_config.clone(), cache.clone());
         
@@ -70,7 +70,7 @@ impl Sidecar {
 
         Self::update_cache(cache.clone());
 
-        let dns = crate::sidecar::dns::DnsServer::start(dns_port.clone(), sidecar_config.clone());
+        let dns = crate::sidecar::dns::DnsServer::start(*dns_port, sidecar_config.clone());
         let outbound = crate::sidecar::outboundproxy::OutboundProxy::start(clip_opts.clone(), sidecar_config.clone(), cache.clone());
         let inbound = crate::sidecar::inboundproxy::InboundProxy::start_https(sidecar_config.clone(), cache.clone());
         
@@ -126,7 +126,7 @@ iptables -t nat -A OTOCTL_DNS_REDIRECT -p udp -j REDIRECT --to-ports {}", uid, d
 
         let script = format!("{}\n{}\n{}\n{}\niptables -t nat --list\n", iptables_backup, outbound_rules, inbound_rule, dns_rule);
 
-        if dry.clone().unwrap_or(false) {
+        if (*dry).unwrap_or(false) {
             cli_stdout_printline!("{}", script);
             std::process::exit(0);
         } else {
@@ -156,7 +156,7 @@ iptables -t nat -A OTOCTL_DNS_REDIRECT -p udp -j REDIRECT --to-ports {}", uid, d
             path = backup
         );
 
-        if dry.clone().unwrap_or(false) {
+        if (*dry).unwrap_or(false) {
             cli_stdout_printline!("{}", script);
             std::process::exit(0);
         } else {

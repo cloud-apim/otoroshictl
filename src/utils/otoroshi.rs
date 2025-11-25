@@ -210,7 +210,7 @@ impl Otoroshi {
             Some(body_bytes) => {
                 match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
                     Ok(infos) => Some(OtoroshiApiSingleResult {
-                        id: id,
+                        id,
                         body: infos,
                     }),
                     Err(e) => {
@@ -229,7 +229,7 @@ impl Otoroshi {
             Some(body_bytes) => {
                 match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
                     Ok(infos) => Some(OtoroshiApiSingleResult {
-                        id: id,
+                        id,
                         body: infos,
                     }),
                     Err(e) => {
@@ -445,7 +445,7 @@ impl Otoroshi {
             debug!("route already exists ...");
             let body_bytes = resp.body_bytes;
             let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-            let domain = json.get("frontend").unwrap().as_object().unwrap().get("domains").unwrap().as_array().unwrap().get(0).unwrap().as_str().unwrap();
+            let domain = json.get("frontend").unwrap().as_object().unwrap().get("domains").unwrap().as_array().unwrap().first().unwrap().as_str().unwrap();
             String::from(domain)
         } else {
             debug!("creating route ...");

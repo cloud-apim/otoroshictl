@@ -126,11 +126,12 @@ impl SidecarCache {
             let kube = otoroshi_location.clone().kubernetes.unwrap_or(OtoroshiSidecarConfigSpecOtoroshiSettingsLocationKubernetesLocation::default());
             format!("{}.{}.svc.cluster.local", kube.service, kube.namespace)
         } else {
-            format!("{}", otoroshi_location.clone().hostname.unwrap())
+            otoroshi_location.clone().hostname.unwrap().to_string()
         };
-        let config = OtoroshiConnectionConfig {
+        
+        OtoroshiConnectionConfig {
             host: hostname_with_port,
-            hostname: hostname,
+            hostname,
             port: otoroshi_location.port,
             ip_addresses: otoroshi_location.ip_addresses,
             cid: otoroshi_credentials.client_id,
@@ -151,11 +152,10 @@ impl SidecarCache {
                     ca_value: cert.ca_value,
                 }
             })
-        };
-        config
+        }
     }
 
-    pub async fn update(&self) -> () {
+    pub async fn update(&self) {
         let inbounds = &self.sidecar_config.spec.inbound;
         let outbounds = &self.sidecar_config.spec.outbounds.outbounds;
         for tls in inbounds.tls.clone().into_iter() {
@@ -169,7 +169,7 @@ impl SidecarCache {
                 let _ = self.async_get_route_by_id(route_id).await;
             }
         }
-        for outbound in outbounds.into_iter() {
+        for outbound in outbounds.iter() {
             for apikey in outbound.1.apikey.clone().into_iter() {
                 let _ = self.async_get_apikey_by_id(apikey.apikey_id).await;
             }
@@ -211,17 +211,14 @@ impl SidecarCache {
                     break;
                 }
             }
-            count = count + 1;
+            count += 1;
         }
         cert
     }
 
     pub fn get_cert_by_id(&self, id: String) -> Option<OtoroshiCertificate> {
         let key = id.clone();
-        match self.certificates_cache.get(&key) {
-            Some(cert) => Some(cert.as_ref().clone()),
-            None => None
-        }
+        self.certificates_cache.get(&key).map(|cert| cert.as_ref().clone())
     }
 
 
@@ -245,10 +242,7 @@ impl SidecarCache {
 
     pub fn get_route_by_id(&self, id: String) -> Option<OtoroshiRoute> {
         let key = id.clone();
-        match self.routes_cache.get(&key) {
-            Some(route) => Some(route.as_ref().clone()),
-            None => None
-        }
+        self.routes_cache.get(&key).map(|route| route.as_ref().clone())
     }
 
     pub fn wait_and_get_route_by_id(&self, id: String, max: i32) -> OtoroshiRoute {
@@ -265,7 +259,7 @@ impl SidecarCache {
                     break;
                 }
             }
-            count = count + 1;
+            count += 1;
         }
         route
     }
@@ -290,10 +284,7 @@ impl SidecarCache {
 
     pub fn get_apikey_by_id(&self, id: String) -> Option<OtoroshiApikey> {
         let key = id.clone();
-        match self.apikeys_cache.get(&key) {
-            Some(apikey) => Some(apikey.as_ref().clone()),
-            None => None
-        }
+        self.apikeys_cache.get(&key).map(|apikey| apikey.as_ref().clone())
     }
 
     pub fn wait_and_get_apikey_by_id(&self, id: String, max: i32) -> OtoroshiApikey {
@@ -310,7 +301,7 @@ impl SidecarCache {
                     break;
                 }
             }
-            count = count + 1;
+            count += 1;
         }
         apikey
     }
