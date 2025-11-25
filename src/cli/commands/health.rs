@@ -1,41 +1,42 @@
-use serde::{Serialize, Deserialize};
-use cli_table::{print_stdout, Cell, Style, Table};
+use cli_table::{Cell, Style, Table, print_stdout};
+use serde::{Deserialize, Serialize};
 
 use crate::cli::cliopts::{CliOpts, Commands};
-use crate::{cli_stderr_printline, cli_stdout_printline};
 use crate::utils::otoroshi::Otoroshi;
+use crate::{cli_stderr_printline, cli_stdout_printline};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ComponentHealth {
-   pub initialized: Option<bool>,
-   pub status: String,
+    pub initialized: Option<bool>,
+    pub status: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ClusterHealth {
-   pub health: String,
+    pub health: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OtoroshiHealth {
-   pub otoroshi: String,
-   pub datastore: String,
-   pub proxy: ComponentHealth,
-   pub storage: ComponentHealth,
-   pub eventstore: ComponentHealth,
-   pub certificates: ComponentHealth,
-   pub scripts: ComponentHealth,
-   pub cluster: Option<ClusterHealth>,
+    pub otoroshi: String,
+    pub datastore: String,
+    pub proxy: ComponentHealth,
+    pub storage: ComponentHealth,
+    pub eventstore: ComponentHealth,
+    pub certificates: ComponentHealth,
+    pub scripts: ComponentHealth,
+    pub cluster: Option<ClusterHealth>,
 }
 
 pub struct HealthCommand {}
 
 impl HealthCommand {
-
     fn healthy_cell(value: String) -> cli_table::CellStruct {
         match value.as_str() {
             "healthy" => value.cell().foreground_color(Some(cli_table::Color::Green)),
-            "unhealthy" => value.cell().foreground_color(Some(cli_table::Color::Magenta)),
+            "unhealthy" => value
+                .cell()
+                .foreground_color(Some(cli_table::Color::Magenta)),
             "down" => value.cell().foreground_color(Some(cli_table::Color::Red)),
             "unreachable" => value.cell().foreground_color(Some(cli_table::Color::Red)),
             _ => value.cell().foreground_color(Some(cli_table::Color::White)),
@@ -50,20 +51,18 @@ impl HealthCommand {
     }
 
     fn default_display(health: OtoroshiHealth) {
-        let table = vec![
-            vec![  
-                Self::healthy_cell(health.otoroshi),
-                Self::healthy_cell(health.datastore),
-                Self::healthy_cell(health.storage.status),
-                Self::healthy_cell(health.eventstore.status),
-                Self::loaded_cell(health.certificates.status),
-                Self::loaded_cell(health.scripts.status),
-                match health.cluster {
-                    None => "".cell(),
-                    Some(cluster) => Self::healthy_cell(cluster.health),
-                },
-            ]
-        ]
+        let table = vec![vec![
+            Self::healthy_cell(health.otoroshi),
+            Self::healthy_cell(health.datastore),
+            Self::healthy_cell(health.storage.status),
+            Self::healthy_cell(health.eventstore.status),
+            Self::loaded_cell(health.certificates.status),
+            Self::loaded_cell(health.scripts.status),
+            match health.cluster {
+                None => "".cell(),
+                Some(cluster) => Self::healthy_cell(cluster.health),
+            },
+        ]]
         .table()
         .title(vec![
             "otoroshi".cell().bold(true),
@@ -82,20 +81,25 @@ impl HealthCommand {
             None => {
                 cli_stderr_printline!("error while fetching health");
                 std::process::exit(-1)
-            },
+            }
             Some(health) => {
                 match cli_opts.ouput {
-                    Some(str) => {
-                        match str.as_str() {
-                            "json" => cli_stdout_printline!("{}", serde_json::to_string(&health).unwrap()),
-                            "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&health).unwrap()),
-                            "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&health).unwrap()),
-                            _ => Self::default_display(health),
+                    Some(str) => match str.as_str() {
+                        "json" => {
+                            cli_stdout_printline!("{}", serde_json::to_string(&health).unwrap())
                         }
+                        "json_pretty" => cli_stdout_printline!(
+                            "{}",
+                            serde_json::to_string_pretty(&health).unwrap()
+                        ),
+                        "yaml" => {
+                            cli_stdout_printline!("{}", serde_yaml::to_string(&health).unwrap())
+                        }
+                        _ => Self::default_display(health),
                     },
                     _ => Self::default_display(health),
                 };
-            },
-        };    
+            }
+        };
     }
 }

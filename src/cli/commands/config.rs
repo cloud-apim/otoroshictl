@@ -3,112 +3,166 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::cli::cliopts::CliOpts;
 use crate::cli::cliopts::ConfigSubCommand;
 use crate::cli::config::OtoroshiCtlConfig;
-use crate::cli::cliopts::CliOpts;
 use crate::cli::config::OtoroshiCtlConfigSpecCluster;
-use crate::cli::config::OtoroshiCtlConfigSpecUser;
 use crate::cli::config::OtoroshiCtlConfigSpecContext;
+use crate::cli::config::OtoroshiCtlConfigSpecUser;
 use crate::cli_stderr_printline;
-use crate::utils::table::TableResource;
-use crate::utils::table::TableHelper;
 use crate::cli_stdout_printline;
+use crate::utils::table::TableHelper;
+use crate::utils::table::TableResource;
 use json_value_merge::Merge;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct DisplayPath {
-    path: String
+    path: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ContextHolder {
-    pub context: String
+    pub context: String,
 }
 
 pub struct ConfigCommand {}
 
 impl ConfigCommand {
-
     pub async fn handle_command(command: &ConfigSubCommand, cli_opts: CliOpts) {
         match command {
-            ConfigSubCommand::CurrentConfig {} => {
-                Self::display_current_config(cli_opts).await
-            },
-            ConfigSubCommand::EditCurrentConfig {} => {
-                Self::edit_current_config(cli_opts).await
-            },
+            ConfigSubCommand::CurrentConfig {} => Self::display_current_config(cli_opts).await,
+            ConfigSubCommand::EditCurrentConfig {} => Self::edit_current_config(cli_opts).await,
             ConfigSubCommand::CurrentLocation {} => {
                 Self::display_current_config_location(cli_opts).await
-            },
-            ConfigSubCommand::CurrentContext {} => {
-                Self::display_current_context(cli_opts).await
-            },
+            }
+            ConfigSubCommand::CurrentContext {} => Self::display_current_context(cli_opts).await,
             ConfigSubCommand::UseContext { name } => {
                 Self::use_context(name, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::Use { name } => {
                 Self::use_context(name, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::RenameContext { old_name, new_name } => {
                 Self::rename_context(old_name, new_name, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::ListClusters {} => {
                 Self::list_clusters(cli_opts).await;
-            },
+            }
             ConfigSubCommand::ListContexts {} => {
                 Self::list_contexts(cli_opts).await;
-            },
+            }
             ConfigSubCommand::ListUsers {} => {
                 Self::list_users(cli_opts).await;
-            },
-            ConfigSubCommand::SetCluster { name, hostname, port, tls, routing_hostname, routing_port, routing_tls } => {
-                Self::set_cluster(name, hostname, port, tls, routing_hostname, routing_port, routing_tls, cli_opts.clone()).await;
-            },
-            ConfigSubCommand::SetUser { name, client_id, client_secret, health_key } => {
+            }
+            ConfigSubCommand::SetCluster {
+                name,
+                hostname,
+                port,
+                tls,
+                routing_hostname,
+                routing_port,
+                routing_tls,
+            } => {
+                Self::set_cluster(
+                    name,
+                    hostname,
+                    port,
+                    tls,
+                    routing_hostname,
+                    routing_port,
+                    routing_tls,
+                    cli_opts.clone(),
+                )
+                .await;
+            }
+            ConfigSubCommand::SetUser {
+                name,
+                client_id,
+                client_secret,
+                health_key,
+            } => {
                 Self::set_user(name, client_id, client_secret, health_key, cli_opts.clone()).await;
-            },
-            ConfigSubCommand::SetContext { name, cluster, user } => {
+            }
+            ConfigSubCommand::SetContext {
+                name,
+                cluster,
+                user,
+            } => {
                 Self::set_context(name, cluster, user, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::DeleteCluster { name } => {
                 Self::delete_cluster(name, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::DeleteUser { name } => {
                 Self::delete_user(name, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::DeleteContext { name } => {
                 Self::delete_context(name, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::Reset {} => {
                 Self::nuke_config(cli_opts.clone()).await;
-            },
-            ConfigSubCommand::Import { file, overwrite, current, name, stdin } => {
+            }
+            ConfigSubCommand::Import {
+                file,
+                overwrite,
+                current,
+                name,
+                stdin,
+            } => {
                 Self::import_context(file, overwrite, current, name, stdin, cli_opts.clone()).await;
-            },
+            }
             ConfigSubCommand::List {} => {
                 Self::display_context_list(cli_opts.clone()).await;
             }
             ConfigSubCommand::Delete { name } => {
                 Self::delete_full_context(name, cli_opts.clone()).await;
             }
-            ConfigSubCommand::Add { name, client_id, client_secret, health_key, hostname, port, tls , current, routing_hostname, routing_port, routing_tls, clever_token, clever_otoroshi_id } => {
+            ConfigSubCommand::Add {
+                name,
+                client_id,
+                client_secret,
+                health_key,
+                hostname,
+                port,
+                tls,
+                current,
+                routing_hostname,
+                routing_port,
+                routing_tls,
+                clever_token,
+                clever_otoroshi_id,
+            } => {
                 if let (Some(token), Some(id)) = (clever_token, clever_otoroshi_id) {
                     Self::import_from_clevercloud(token, id, name, current, cli_opts.clone()).await;
                 } else if clever_token.is_some() || clever_otoroshi_id.is_some() {
-                    cli_stderr_printline!("Both --clever-token and --clever-otoroshi-id are required to import from Clever Cloud");
+                    cli_stderr_printline!(
+                        "Both --clever-token and --clever-otoroshi-id are required to import from Clever Cloud"
+                    );
                     std::process::exit(-1);
                 } else {
                     match (client_id, client_secret, hostname, port) {
                         (Some(cid), Some(csec), Some(host), Some(p)) => {
-                            Self::set_cluster(name, host, p, tls, routing_hostname, routing_port, routing_tls, cli_opts.clone()).await;
+                            Self::set_cluster(
+                                name,
+                                host,
+                                p,
+                                tls,
+                                routing_hostname,
+                                routing_port,
+                                routing_tls,
+                                cli_opts.clone(),
+                            )
+                            .await;
                             Self::set_user(name, cid, csec, health_key, cli_opts.clone()).await;
                             Self::set_context(name, name, name, cli_opts.clone()).await;
                             if *current {
                                 Self::use_context(name, cli_opts.clone()).await;
                             }
-                        },
+                        }
                         _ => {
-                            cli_stderr_printline!("Missing required parameters. Either use --clever-token with --clever-otoroshi-id or provide --client-id, --client-secret, --hostname, and --port");
+                            cli_stderr_printline!(
+                                "Missing required parameters. Either use --clever-token with --clever-otoroshi-id or provide --client-id, --client-secret, --hostname, and --port"
+                            );
                             std::process::exit(-1);
                         }
                     }
@@ -120,11 +174,21 @@ impl ConfigCommand {
     fn get_config_file_path(cli_opts: CliOpts) -> String {
         match cli_opts.config_file {
             Some(file) => file,
-            None => confy::get_configuration_file_path("io.otoroshi.otoroshictl", Some("config")).unwrap().to_string_lossy().to_string(),
+            None => confy::get_configuration_file_path("io.otoroshi.otoroshictl", Some("config"))
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
         }
     }
 
-    pub async fn import_context(path: &Option<String>, overwrite: &bool, change_current: &bool, name: &Option<String>, stdin: &bool, cli_opts: CliOpts) {
+    pub async fn import_context(
+        path: &Option<String>,
+        overwrite: &bool,
+        change_current: &bool,
+        name: &Option<String>,
+        stdin: &bool,
+        cli_opts: CliOpts,
+    ) {
         let content = if *stdin {
             // Read from stdin
             if path.is_some() {
@@ -148,25 +212,37 @@ impl ConfigCommand {
                         Err(err) => {
                             cli_stderr_printline!("{}", err);
                             return;
-                        },
+                        }
                         Ok(c) => c,
                     }
-                },
+                }
                 None => {
                     cli_stderr_printline!("Either provide a file argument or use --stdin");
                     std::process::exit(-1);
                 }
             }
         };
-        
+
         let imported_config = OtoroshiCtlConfig::read_from_string(&content).unwrap();
         match name {
             Some(name) => {
                 let mut config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-                match imported_config.contexts.into_iter().find(|c| c.name == *name) {
+                match imported_config
+                    .contexts
+                    .into_iter()
+                    .find(|c| c.name == *name)
+                {
                     Some(ctx) => {
-                        let user = imported_config.users.into_iter().find(|u| u.name == ctx.user).unwrap();
-                        let cluster = imported_config.clusters.into_iter().find(|u| u.name == ctx.cluster).unwrap();
+                        let user = imported_config
+                            .users
+                            .into_iter()
+                            .find(|u| u.name == ctx.user)
+                            .unwrap();
+                        let cluster = imported_config
+                            .clusters
+                            .into_iter()
+                            .find(|u| u.name == ctx.cluster)
+                            .unwrap();
 
                         config.users.push(user);
                         config.clusters.push(cluster);
@@ -178,22 +254,27 @@ impl ConfigCommand {
                             config.current_context = name.to_string();
                         }
                         OtoroshiCtlConfig::write_current_config(config);
-                    }, 
+                    }
                     _ => {
-                        cli_stdout_printline!("context name '{}' does not exists and cannot be imported", name);
+                        cli_stdout_printline!(
+                            "context name '{}' does not exists and cannot be imported",
+                            name
+                        );
                         std::process::exit(-1)
                     }
                 }
-            }, 
+            }
             _ => {
                 if overwrite.to_owned() {
                     OtoroshiCtlConfig::write_current_config(imported_config);
                 } else {
                     let config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-                    
+
                     let mut users: HashMap<String, OtoroshiCtlConfigSpecUser> = HashMap::new();
-                    let mut contexts: HashMap<String, OtoroshiCtlConfigSpecContext> = HashMap::new();
-                    let mut clusters: HashMap<String, OtoroshiCtlConfigSpecCluster> = HashMap::new();
+                    let mut contexts: HashMap<String, OtoroshiCtlConfigSpecContext> =
+                        HashMap::new();
+                    let mut clusters: HashMap<String, OtoroshiCtlConfigSpecCluster> =
+                        HashMap::new();
 
                     for user in config.users.into_iter() {
                         users.insert(user.name.clone(), user);
@@ -234,89 +315,125 @@ impl ConfigCommand {
         let path = Self::get_config_file_path(cli_opts.clone());
         match crate::utils::file::FileHelper::get_content_string_result(&path).await {
             Err(err) => cli_stderr_printline!("{}", err),
-            Ok(content) =>  cli_stdout_printline!("{}", content),
+            Ok(content) => cli_stdout_printline!("{}", content),
         }
     }
 
     pub async fn delete_full_context(name: &Option<String>, cli_opts: CliOpts) {
-        let config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        let config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match name {
             None => {
-                match config.contexts.into_iter().find(|c| c.name == config.current_context) {
+                match config
+                    .contexts
+                    .into_iter()
+                    .find(|c| c.name == config.current_context)
+                {
                     None => {
                         cli_stderr_printline!("context named {} not found", config.current_context);
-                    },
-                    Some(context) => {
-                        Self::delete_cluster(&context.cluster, cli_opts.clone()).await;
-                        Self::delete_user(&context.user, cli_opts.clone()).await;
-                        Self::delete_context(&context.name, cli_opts.clone()).await;
-                        let mut new_config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-                        new_config.current_context = new_config.contexts.first().map(|i| i.name.to_string()).unwrap_or("none".to_string());
-                        OtoroshiCtlConfig::write_current_config(new_config);
                     }
-                }
-            },
-            Some(name) => {
-                match config.contexts.into_iter().find(|c| c.name == *name) {
-                    None => {
-                        cli_stderr_printline!("context named {} not found", name);
-                    },
                     Some(context) => {
                         Self::delete_cluster(&context.cluster, cli_opts.clone()).await;
                         Self::delete_user(&context.user, cli_opts.clone()).await;
                         Self::delete_context(&context.name, cli_opts.clone()).await;
-                        let mut new_config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-                        new_config.current_context = new_config.contexts.first().map(|i| i.name.to_string()).unwrap_or("none".to_string());
+                        let mut new_config: OtoroshiCtlConfig =
+                            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+                        new_config.current_context = new_config
+                            .contexts
+                            .first()
+                            .map(|i| i.name.to_string())
+                            .unwrap_or("none".to_string());
                         OtoroshiCtlConfig::write_current_config(new_config);
                     }
                 }
             }
+            Some(name) => match config.contexts.into_iter().find(|c| c.name == *name) {
+                None => {
+                    cli_stderr_printline!("context named {} not found", name);
+                }
+                Some(context) => {
+                    Self::delete_cluster(&context.cluster, cli_opts.clone()).await;
+                    Self::delete_user(&context.user, cli_opts.clone()).await;
+                    Self::delete_context(&context.name, cli_opts.clone()).await;
+                    let mut new_config: OtoroshiCtlConfig =
+                        OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+                    new_config.current_context = new_config
+                        .contexts
+                        .first()
+                        .map(|i| i.name.to_string())
+                        .unwrap_or("none".to_string());
+                    OtoroshiCtlConfig::write_current_config(new_config);
+                }
+            },
         }
     }
 
     pub async fn display_context_list(cli_opts: CliOpts) {
-        let config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        let config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match cli_opts.ouput {
-            Some(str) if str == "json" => cli_stdout_printline!("{}", serde_json::to_string(&config.contexts.into_iter().map(|c| c.name).collect::<Vec<_>>()).unwrap()),
-            Some(str) if str == "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&config.contexts.into_iter().map(|c| c.name).collect::<Vec<_>>()).unwrap()),
-            Some(str) if str == "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&config.contexts.into_iter().map(|c| c.name).collect::<Vec<_>>()).unwrap()),
+            Some(str) if str == "json" => cli_stdout_printline!(
+                "{}",
+                serde_json::to_string(
+                    &config
+                        .contexts
+                        .into_iter()
+                        .map(|c| c.name)
+                        .collect::<Vec<_>>()
+                )
+                .unwrap()
+            ),
+            Some(str) if str == "json_pretty" => cli_stdout_printline!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &config
+                        .contexts
+                        .into_iter()
+                        .map(|c| c.name)
+                        .collect::<Vec<_>>()
+                )
+                .unwrap()
+            ),
+            Some(str) if str == "yaml" => cli_stdout_printline!(
+                "{}",
+                serde_yaml::to_string(
+                    &config
+                        .contexts
+                        .into_iter()
+                        .map(|c| c.name)
+                        .collect::<Vec<_>>()
+                )
+                .unwrap()
+            ),
             _ => {
                 let columns = vec![
                     "name".to_string(),
                     "current".to_string(),
                     "cloud_apim".to_string(),
                 ];
-                let vec = config.contexts.into_iter().map(|u| {
-                    if u.name == config.current_context {
-                        let current = serde_json::json!({"current":"yes"});
-                        let cloud_apim_value = if u.cloud_apim {
-                            "yes"
+                let vec = config
+                    .contexts
+                    .into_iter()
+                    .map(|u| {
+                        if u.name == config.current_context {
+                            let current = serde_json::json!({"current":"yes"});
+                            let cloud_apim_value = if u.cloud_apim { "yes" } else { "" };
+                            let cloud_apim = serde_json::json!({"cloud_apim":cloud_apim_value});
+                            let mut res = serde_json::to_value(u).unwrap();
+                            res.merge(&current);
+                            res.merge(&cloud_apim);
+                            TableResource { raw: res }
                         } else {
-                            ""
-                        };
-                        let cloud_apim = serde_json::json!({"cloud_apim":cloud_apim_value});
-                        let mut res = serde_json::to_value(u).unwrap();
-                        res.merge(&current);
-                        res.merge(&cloud_apim);
-                        TableResource {
-                            raw: res,
+                            let current = serde_json::json!({"current":""});
+                            let cloud_apim_value = if u.cloud_apim { "yes" } else { "" };
+                            let cloud_apim = serde_json::json!({"cloud_apim":cloud_apim_value});
+                            let mut res = serde_json::to_value(u).unwrap();
+                            res.merge(&current);
+                            res.merge(&cloud_apim);
+                            TableResource { raw: res }
                         }
-                    } else {
-                        let current = serde_json::json!({"current":""});
-                        let cloud_apim_value = if u.cloud_apim {
-                            "yes"
-                        } else {
-                            ""
-                        };
-                        let cloud_apim = serde_json::json!({"cloud_apim":cloud_apim_value});
-                        let mut res = serde_json::to_value(u).unwrap();
-                        res.merge(&current);
-                        res.merge(&cloud_apim);
-                        TableResource {
-                            raw: res,
-                        }
-                    }
-                }).collect();
+                    })
+                    .collect();
                 TableHelper::display_table_of_resources_with_custom_columns(vec, columns)
             }
         };
@@ -335,13 +452,17 @@ impl ConfigCommand {
 
     async fn display_current_config_location(cli_opts: CliOpts) {
         let path = Self::get_config_file_path(cli_opts.clone());
-        let current = DisplayPath {
-            path: path.clone(),
-        };
+        let current = DisplayPath { path: path.clone() };
         match cli_opts.ouput {
-            Some(output) if output == "json" => cli_stdout_printline!("{}", serde_json::to_string(&current).unwrap()),
-            Some(output) if output == "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&current).unwrap()),
-            Some(output) if output == "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&current).unwrap()),
+            Some(output) if output == "json" => {
+                cli_stdout_printline!("{}", serde_json::to_string(&current).unwrap())
+            }
+            Some(output) if output == "json_pretty" => {
+                cli_stdout_printline!("{}", serde_json::to_string_pretty(&current).unwrap())
+            }
+            Some(output) if output == "yaml" => {
+                cli_stdout_printline!("{}", serde_yaml::to_string(&current).unwrap())
+            }
             _ => cli_stdout_printline!("{}", path.clone()),
         }
     }
@@ -352,16 +473,27 @@ impl ConfigCommand {
             context: config.current_context,
         };
         match cli_opts.ouput {
-            Some(str) if str == "json" => cli_stdout_printline!("{}", serde_json::to_string(&current).unwrap()),
-            Some(str) if str == "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&current).unwrap()),
-            Some(str) if str == "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&current).unwrap()),
+            Some(str) if str == "json" => {
+                cli_stdout_printline!("{}", serde_json::to_string(&current).unwrap())
+            }
+            Some(str) if str == "json_pretty" => {
+                cli_stdout_printline!("{}", serde_json::to_string_pretty(&current).unwrap())
+            }
+            Some(str) if str == "yaml" => {
+                cli_stdout_printline!("{}", serde_yaml::to_string(&current).unwrap())
+            }
             _ => cli_stdout_printline!("{}", current.context),
         };
     }
 
     pub async fn use_context(name: &String, cli_opts: CliOpts) {
         let mut config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.contexts.clone().into_iter().find(|i| i.name == *name) {
+        match config
+            .contexts
+            .clone()
+            .into_iter()
+            .find(|i| i.name == *name)
+        {
             None => cli_stdout_printline!("context '{}' does not exists", name),
             Some(_) => {
                 config.current_context = name.to_string();
@@ -372,17 +504,27 @@ impl ConfigCommand {
 
     pub async fn rename_context(old_name: &String, new_name: &String, cli_opts: CliOpts) {
         let mut config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.contexts.clone().into_iter().find(|i| i.name == *old_name) {
+        match config
+            .contexts
+            .clone()
+            .into_iter()
+            .find(|i| i.name == *old_name)
+        {
             None => cli_stdout_printline!("context '{}' does not exists", old_name),
             Some(_) => {
-                let new_contexts = config.contexts.clone().into_iter().map(|mut c| {
-                    if c.name == *old_name {
-                        c.name = new_name.to_string();
-                        c
-                    } else {
-                        c
-                    }
-                }).collect();
+                let new_contexts = config
+                    .contexts
+                    .clone()
+                    .into_iter()
+                    .map(|mut c| {
+                        if c.name == *old_name {
+                            c.name = new_name.to_string();
+                            c
+                        } else {
+                            c
+                        }
+                    })
+                    .collect();
                 config.contexts = new_contexts;
                 OtoroshiCtlConfig::write_current_config(config);
             }
@@ -392,9 +534,16 @@ impl ConfigCommand {
     pub async fn list_clusters(cli_opts: CliOpts) {
         let config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match cli_opts.ouput {
-            Some(str) if str == "json" => cli_stdout_printline!("{}", serde_json::to_string(&config.clusters).unwrap()),
-            Some(str) if str == "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&config.clusters).unwrap()),
-            Some(str) if str == "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&config.clusters).unwrap()),
+            Some(str) if str == "json" => {
+                cli_stdout_printline!("{}", serde_json::to_string(&config.clusters).unwrap())
+            }
+            Some(str) if str == "json_pretty" => cli_stdout_printline!(
+                "{}",
+                serde_json::to_string_pretty(&config.clusters).unwrap()
+            ),
+            Some(str) if str == "yaml" => {
+                cli_stdout_printline!("{}", serde_yaml::to_string(&config.clusters).unwrap())
+            }
             _ => {
                 let columns = vec![
                     "name".to_string(),
@@ -403,22 +552,31 @@ impl ConfigCommand {
                     "tls".to_string(),
                     "client_cert".to_string(),
                 ];
-                let vec = config.clusters.into_iter().map(|u| {
-                    TableResource {
+                let vec = config
+                    .clusters
+                    .into_iter()
+                    .map(|u| TableResource {
                         raw: serde_json::to_value(u).unwrap(),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 TableHelper::display_table_of_resources_with_custom_columns(vec, columns)
-            },
+            }
         };
     }
 
     pub async fn list_contexts(cli_opts: CliOpts) {
         let config = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match cli_opts.ouput {
-            Some(str) if str == "json" => cli_stdout_printline!("{}", serde_json::to_string(&config.contexts).unwrap()),
-            Some(str) if str == "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&config.contexts).unwrap()),
-            Some(str) if str == "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&config.contexts).unwrap()),
+            Some(str) if str == "json" => {
+                cli_stdout_printline!("{}", serde_json::to_string(&config.contexts).unwrap())
+            }
+            Some(str) if str == "json_pretty" => cli_stdout_printline!(
+                "{}",
+                serde_json::to_string_pretty(&config.contexts).unwrap()
+            ),
+            Some(str) if str == "yaml" => {
+                cli_stdout_printline!("{}", serde_yaml::to_string(&config.contexts).unwrap())
+            }
             _ => {
                 let columns = vec![
                     "name".to_string(),
@@ -426,46 +584,66 @@ impl ConfigCommand {
                     "user".to_string(),
                     "cloud_apim".to_string(),
                 ];
-                let vec = config.contexts.into_iter().map(|u| {
-                    TableResource {
+                let vec = config
+                    .contexts
+                    .into_iter()
+                    .map(|u| TableResource {
                         raw: serde_json::to_value(u).unwrap(),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 TableHelper::display_table_of_resources_with_custom_columns(vec, columns)
-            },
+            }
         };
     }
 
     pub async fn list_users(cli_opts: CliOpts) {
-        let config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        let config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match cli_opts.ouput {
-            Some(str) if str == "json" => cli_stdout_printline!("{}", serde_json::to_string(&config.users).unwrap()),
-            Some(str) if str == "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&config.users).unwrap()),
-            Some(str) if str == "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&config.users).unwrap()),
+            Some(str) if str == "json" => {
+                cli_stdout_printline!("{}", serde_json::to_string(&config.users).unwrap())
+            }
+            Some(str) if str == "json_pretty" => {
+                cli_stdout_printline!("{}", serde_json::to_string_pretty(&config.users).unwrap())
+            }
+            Some(str) if str == "yaml" => {
+                cli_stdout_printline!("{}", serde_yaml::to_string(&config.users).unwrap())
+            }
             _ => {
                 let columns = vec![
                     "name".to_string(),
                     "client_id".to_string(),
                     "client_secret".to_string(),
                 ];
-                let vec = config.users.into_iter().map(|u| {
-                    TableResource {
+                let vec = config
+                    .users
+                    .into_iter()
+                    .map(|u| TableResource {
                         raw: serde_json::to_value(u).unwrap(),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 TableHelper::display_table_of_resources_with_custom_columns(vec, columns)
             }
         };
     }
 
     pub async fn delete_cluster(name: &String, cli_opts: CliOpts) {
-        let mut config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.clusters.clone().into_iter().find(|i| i.name == *name) {
+        let mut config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        match config
+            .clusters
+            .clone()
+            .into_iter()
+            .find(|i| i.name == *name)
+        {
             None => cli_stdout_printline!("cluster '{}' does not exists", name),
             Some(_) => {
-                let new_clusters = config.clusters.clone().into_iter().filter(|c| {
-                    c.name != *name
-                }).collect();
+                let new_clusters = config
+                    .clusters
+                    .clone()
+                    .into_iter()
+                    .filter(|c| c.name != *name)
+                    .collect();
                 config.clusters = new_clusters;
                 OtoroshiCtlConfig::write_current_config(config);
             }
@@ -473,13 +651,17 @@ impl ConfigCommand {
     }
 
     pub async fn delete_user(name: &String, cli_opts: CliOpts) {
-        let mut config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        let mut config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match config.users.clone().into_iter().find(|i| i.name == *name) {
             None => cli_stdout_printline!("user '{}' does not exists", name),
             Some(_) => {
-                let new_users = config.users.clone().into_iter().filter(|c| {
-                    c.name != *name
-                }).collect();
+                let new_users = config
+                    .users
+                    .clone()
+                    .into_iter()
+                    .filter(|c| c.name != *name)
+                    .collect();
                 config.users = new_users;
                 OtoroshiCtlConfig::write_current_config(config);
             }
@@ -491,22 +673,46 @@ impl ConfigCommand {
     }
 
     pub async fn delete_context(name: &String, cli_opts: CliOpts) {
-        let mut config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.contexts.clone().into_iter().find(|i| i.name == *name) {
+        let mut config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        match config
+            .contexts
+            .clone()
+            .into_iter()
+            .find(|i| i.name == *name)
+        {
             None => cli_stdout_printline!("context '{}' does not exists", name),
             Some(_) => {
-                let new_contexts = config.contexts.clone().into_iter().filter(|c| {
-                    c.name != *name
-                }).collect();
+                let new_contexts = config
+                    .contexts
+                    .clone()
+                    .into_iter()
+                    .filter(|c| c.name != *name)
+                    .collect();
                 config.contexts = new_contexts;
                 OtoroshiCtlConfig::write_current_config(config);
             }
         }
     }
 
-    pub async fn set_cluster(name: &String, hostname: &String, port: &u16, tls: &bool, routing_hostname: &Option<String>, routing_port: &Option<u16>, routing_tls: &Option<bool>, cli_opts: CliOpts) {
-        let mut config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.clusters.clone().into_iter().find(|i| i.name == *name) {
+    pub async fn set_cluster(
+        name: &String,
+        hostname: &String,
+        port: &u16,
+        tls: &bool,
+        routing_hostname: &Option<String>,
+        routing_port: &Option<u16>,
+        routing_tls: &Option<bool>,
+        cli_opts: CliOpts,
+    ) {
+        let mut config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        match config
+            .clusters
+            .clone()
+            .into_iter()
+            .find(|i| i.name == *name)
+        {
             None => {
                 let mut new_clusters = config.clusters.clone();
                 new_clusters.push(OtoroshiCtlConfigSpecCluster {
@@ -516,37 +722,49 @@ impl ConfigCommand {
                     ip_addresses: None,
                     tls: *tls,
                     client_cert: None,
-                    routing_hostname: routing_hostname.clone(), 
-                    routing_port: *routing_port, 
+                    routing_hostname: routing_hostname.clone(),
+                    routing_port: *routing_port,
                     routing_tls: *routing_tls,
                     routing_ip_addresses: None,
                 });
                 config.clusters = new_clusters;
                 OtoroshiCtlConfig::write_current_config(config);
-            },
+            }
             Some(_) => {
-                let new_clusters = config.clusters.clone().into_iter().map(|mut c| {
-                    if c.name == *name {
-                        c.name = name.to_string();
-                        c.hostname = hostname.to_string();
-                        c.port = *port;
-                        c.tls = *tls;
-                        c.routing_hostname = routing_hostname.clone();
-                        c.routing_port = *routing_port;
-                        c.routing_tls = *routing_tls;
-                        c
-                    } else {
-                        c
-                    }
-                }).collect();
+                let new_clusters = config
+                    .clusters
+                    .clone()
+                    .into_iter()
+                    .map(|mut c| {
+                        if c.name == *name {
+                            c.name = name.to_string();
+                            c.hostname = hostname.to_string();
+                            c.port = *port;
+                            c.tls = *tls;
+                            c.routing_hostname = routing_hostname.clone();
+                            c.routing_port = *routing_port;
+                            c.routing_tls = *routing_tls;
+                            c
+                        } else {
+                            c
+                        }
+                    })
+                    .collect();
                 config.clusters = new_clusters;
                 OtoroshiCtlConfig::write_current_config(config);
             }
         }
     }
 
-    pub async fn set_user(name: &String, client_id: &String, client_secret: &String, health_key: &Option<String>, cli_opts: CliOpts) {
-        let mut config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+    pub async fn set_user(
+        name: &String,
+        client_id: &String,
+        client_secret: &String,
+        health_key: &Option<String>,
+        cli_opts: CliOpts,
+    ) {
+        let mut config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match config.users.clone().into_iter().find(|i| i.name == *name) {
             None => {
                 let mut new_users = config.users.clone();
@@ -558,18 +776,23 @@ impl ConfigCommand {
                 });
                 config.users = new_users;
                 OtoroshiCtlConfig::write_current_config(config);
-            },
+            }
             Some(_) => {
-                let new_users = config.users.clone().into_iter().map(|mut c| {
-                    if c.name == *name {
-                        c.name = name.to_string();
-                        c.client_id = client_id.to_string();
-                        c.client_secret = client_secret.to_string();
-                        c
-                    } else {
-                        c
-                    }
-                }).collect();
+                let new_users = config
+                    .users
+                    .clone()
+                    .into_iter()
+                    .map(|mut c| {
+                        if c.name == *name {
+                            c.name = name.to_string();
+                            c.client_id = client_id.to_string();
+                            c.client_secret = client_secret.to_string();
+                            c
+                        } else {
+                            c
+                        }
+                    })
+                    .collect();
                 config.users = new_users;
                 OtoroshiCtlConfig::write_current_config(config);
             }
@@ -577,27 +800,41 @@ impl ConfigCommand {
     }
 
     pub async fn set_context(name: &String, cluster: &String, user: &String, cli_opts: CliOpts) {
-        let mut config: OtoroshiCtlConfig = OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.clusters.clone().into_iter().find(|i| i.name == *cluster) {
+        let mut config: OtoroshiCtlConfig =
+            OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        match config
+            .clusters
+            .clone()
+            .into_iter()
+            .find(|i| i.name == *cluster)
+        {
             None => cli_stdout_printline!("cluster '{}' does not exists", name),
-            Some(_) => {
-                match config.users.clone().into_iter().find(|i| i.name == *user) {
-                    None => cli_stdout_printline!("user '{}' does not exists", name),
-                    Some(_) => {
-                        match config.contexts.clone().into_iter().find(|i| i.name == *name) {
-                            None => {
-                                let mut new_contexts = config.contexts.clone();
-                                new_contexts.push(OtoroshiCtlConfigSpecContext {
-                                    name: name.to_string(),
-                                    cluster: cluster.to_string(),
-                                    user: user.to_string(),
-                                    cloud_apim: false,
-                                });
-                                config.contexts = new_contexts;
-                                OtoroshiCtlConfig::write_current_config(config);
-                            },
-                            Some(_) => {
-                                let new_contexts = config.contexts.clone().into_iter().map(|mut c| {
+            Some(_) => match config.users.clone().into_iter().find(|i| i.name == *user) {
+                None => cli_stdout_printline!("user '{}' does not exists", name),
+                Some(_) => {
+                    match config
+                        .contexts
+                        .clone()
+                        .into_iter()
+                        .find(|i| i.name == *name)
+                    {
+                        None => {
+                            let mut new_contexts = config.contexts.clone();
+                            new_contexts.push(OtoroshiCtlConfigSpecContext {
+                                name: name.to_string(),
+                                cluster: cluster.to_string(),
+                                user: user.to_string(),
+                                cloud_apim: false,
+                            });
+                            config.contexts = new_contexts;
+                            OtoroshiCtlConfig::write_current_config(config);
+                        }
+                        Some(_) => {
+                            let new_contexts = config
+                                .contexts
+                                .clone()
+                                .into_iter()
+                                .map(|mut c| {
                                     if c.name == *name {
                                         c.name = name.to_string();
                                         c.user = user.to_string();
@@ -606,39 +843,60 @@ impl ConfigCommand {
                                     } else {
                                         c
                                     }
-                                }).collect();
-                                config.contexts = new_contexts;
-                                OtoroshiCtlConfig::write_current_config(config);
-                            }
+                                })
+                                .collect();
+                            config.contexts = new_contexts;
+                            OtoroshiCtlConfig::write_current_config(config);
                         }
                     }
                 }
-            }
+            },
         }
     }
 
-    pub async fn import_from_clevercloud(token: &String, otoroshi_id: &String, name: &String, current: &bool, cli_opts: CliOpts) {
-        let url = format!("https://api-bridge.clever-cloud.com/v4/addon-providers/addon-otoroshi/addons/{}", otoroshi_id);
+    pub async fn import_from_clevercloud(
+        token: &String,
+        otoroshi_id: &String,
+        name: &String,
+        current: &bool,
+        cli_opts: CliOpts,
+    ) {
+        let url = format!(
+            "https://api-bridge.clever-cloud.com/v4/addon-providers/addon-otoroshi/addons/{}",
+            otoroshi_id
+        );
 
         match crate::utils::http::Http::get_with_bearer(&url, token).await {
             Err(err) => {
-                cli_stderr_printline!("Error fetching Clever Cloud addon '{}': {}", otoroshi_id, err);
+                cli_stderr_printline!(
+                    "Error fetching Clever Cloud addon '{}': {}",
+                    otoroshi_id,
+                    err
+                );
                 std::process::exit(-1);
-            },
+            }
             Ok(content) => {
                 match serde_json::from_slice::<serde_json::Value>(&content.content) {
                     Err(err) => {
-                        cli_stderr_printline!("Error parsing Clever Cloud response for '{}': {}", otoroshi_id, err);
+                        cli_stderr_printline!(
+                            "Error parsing Clever Cloud response for '{}': {}",
+                            otoroshi_id,
+                            err
+                        );
                         std::process::exit(-1);
-                    },
+                    }
                     Ok(json) => {
                         if let Some(api) = json.get("api") {
                             let url = api.get("url").and_then(|v| v.as_str()).unwrap_or("");
                             let client_id = api.get("user").and_then(|v| v.as_str()).unwrap_or("");
-                            let client_secret = api.get("secret").and_then(|v| v.as_str()).unwrap_or("");
+                            let client_secret =
+                                api.get("secret").and_then(|v| v.as_str()).unwrap_or("");
 
                             if url.is_empty() || client_id.is_empty() || client_secret.is_empty() {
-                                cli_stderr_printline!("Missing required fields in Clever Cloud API response for '{}'", otoroshi_id);
+                                cli_stderr_printline!(
+                                    "Missing required fields in Clever Cloud API response for '{}'",
+                                    otoroshi_id
+                                );
                                 std::process::exit(-1);
                             }
 
@@ -648,17 +906,41 @@ impl ConfigCommand {
                             let port = 443u16;
                             let tls = true;
 
-                            Self::set_cluster(name, &hostname.to_string(), &port, &tls, &None, &None, &None, cli_opts.clone()).await;
-                            Self::set_user(name, &client_id.to_string(), &client_secret.to_string(), &None, cli_opts.clone()).await;
+                            Self::set_cluster(
+                                name,
+                                &hostname.to_string(),
+                                &port,
+                                &tls,
+                                &None,
+                                &None,
+                                &None,
+                                cli_opts.clone(),
+                            )
+                            .await;
+                            Self::set_user(
+                                name,
+                                &client_id.to_string(),
+                                &client_secret.to_string(),
+                                &None,
+                                cli_opts.clone(),
+                            )
+                            .await;
                             Self::set_context(name, name, name, cli_opts.clone()).await;
 
-                            cli_stdout_printline!("Successfully imported '{}' as '{}'", otoroshi_id, name);
+                            cli_stdout_printline!(
+                                "Successfully imported '{}' as '{}'",
+                                otoroshi_id,
+                                name
+                            );
 
                             if *current {
                                 Self::use_context(name, cli_opts).await;
                             }
                         } else {
-                            cli_stderr_printline!("No 'api' object found in Clever Cloud response for '{}'", otoroshi_id);
+                            cli_stderr_printline!(
+                                "No 'api' object found in Clever Cloud response for '{}'",
+                                otoroshi_id
+                            );
                             std::process::exit(-1);
                         }
                     }
@@ -666,5 +948,4 @@ impl ConfigCommand {
             }
         }
     }
-
 }

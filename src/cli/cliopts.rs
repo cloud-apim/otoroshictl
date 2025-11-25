@@ -8,7 +8,6 @@ use std::path::PathBuf;
 #[clap(about = "Manage your otoroshi clusters with style. otoroshictl is a CLI that can interact with the admin api of an otoroshi cluster. \n\nYou can also use it to expose local process through the otoroshi remote tunnels feature and as an universal sidecar to create a service mesh based on otoroshi. otoroshictl also provide a nice integration with Cloud APIM. \n\notoroshictl is an open-source tool proudly provided by Cloud APIM (https://www.cloud-apim.com). Cloud APIM is a company that provides managed Otoroshi clusters and Wasmo instances perfectly configured and optimized, ready in seconds. The sources of otoroshictl are available on github at https://github.com/cloud-apim/otoroshictl", long_about = None)]
 #[clap(arg_required_else_help(true))]
 pub struct CliOpts {
-
     /// Turn debugging information on
     #[arg(short, long, global = true, action = clap::ArgAction::SetTrue)]
     pub verbose: bool,
@@ -33,15 +32,15 @@ pub struct CliOpts {
     /// Sets the port to connect to a custom otoroshi cluster without using a config file
     #[arg(long, global = true, value_name = "PORT")]
     pub otoroshi_cluster_port: Option<u16>,
-     /// Sets the tls flag to connect to a custom otoroshi cluster without using a config file
-     #[arg(long, global = true, action = clap::ArgAction::SetTrue)]
-     pub otoroshi_cluster_routing_tls: Option<bool>,
-     /// Sets the hostname to connect to a custom otoroshi cluster without using a config file
-     #[arg(long, global = true, value_name = "HOSTNAME")]
-     pub otoroshi_cluster_routing_hostname: Option<String>,
-     /// Sets the port to connect to a custom otoroshi cluster without using a config file
-     #[arg(long, global = true, value_name = "PORT")]
-     pub otoroshi_cluster_routing_port: Option<u16>,
+    /// Sets the tls flag to connect to a custom otoroshi cluster without using a config file
+    #[arg(long, global = true, action = clap::ArgAction::SetTrue)]
+    pub otoroshi_cluster_routing_tls: Option<bool>,
+    /// Sets the hostname to connect to a custom otoroshi cluster without using a config file
+    #[arg(long, global = true, value_name = "HOSTNAME")]
+    pub otoroshi_cluster_routing_hostname: Option<String>,
+    /// Sets the port to connect to a custom otoroshi cluster without using a config file
+    #[arg(long, global = true, value_name = "PORT")]
+    pub otoroshi_cluster_routing_port: Option<u16>,
     /// Sets the client_id to connect to a custom otoroshi cluster without using a config file
     #[arg(long, global = true, value_name = "CLIENT_ID")]
     pub otoroshi_user_client_id: Option<String>,
@@ -252,7 +251,7 @@ pub enum ResourcesSubCommand {
         /// the username used for the ServiceAccount, ClusterRoleBinding, ClusterRole
         #[arg(long)]
         username: Option<String>,
-    }, 
+    },
     /// Get otoroshi resource from current cluster
     Get {
         /// Optional resource name to operate on
@@ -289,7 +288,7 @@ pub enum ResourcesSubCommand {
         directory: Option<PathBuf>,
         /// Walk through sub directories
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
-        recursive: Option<bool>
+        recursive: Option<bool>,
     },
     /// Update otoroshi resources through json merge or json patch
     Patch {
@@ -321,7 +320,7 @@ pub enum ResourcesSubCommand {
         /// Use inline PATH=VALUE tuples as entity input
         #[arg(long, value_name = "PATH=VALUE")]
         data: Vec<String>,
-        /// The optional inline entity input 
+        /// The optional inline entity input
         input: Option<String>,
         /// Use stdin as entity input
         #[clap(long, action, default_value = "false")]
@@ -337,7 +336,7 @@ pub enum ResourcesSubCommand {
         /// Use inline PATH=VALUE tuples as entity input
         #[arg(long, value_name = "PATH=VALUE")]
         data: Vec<String>,
-        /// The optional inline entity input 
+        /// The optional inline entity input
         input: Option<String>,
         /// Use stdin as entity input
         #[clap(long, action, default_value = "false")]
@@ -383,7 +382,7 @@ pub enum ResourcesSubCommand {
         /// import from ndjson format
         #[arg(long, action = clap::ArgAction::SetTrue)]
         nd_json: Option<bool>,
-    }
+    },
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -392,19 +391,19 @@ pub enum SidecarSubCommand {
     Howto {},
     /// Run otoroshi sidecar
     Run {
-       /// The sidecar config file
-       #[arg(short, long, value_name = "FILE or URL")]
-       file: Option<String>,
-       // /// The sidecar dns server port
-       // #[arg(long, value_name = "PORT")]
-       // dns_port: Option<u16>,
-    }, 
+        /// The sidecar config file
+        #[arg(short, long, value_name = "FILE or URL")]
+        file: Option<String>,
+        // /// The sidecar dns server port
+        // #[arg(long, value_name = "PORT")]
+        // dns_port: Option<u16>,
+    },
     GenerateConfig {
         /// The sidecar config file to generate
         #[arg(short, long, value_name = "FILE")]
         file: Option<String>,
-     }, 
-    /// Install transparent proxing of the mesh calls through iptables rules 
+    },
+    /// Install transparent proxing of the mesh calls through iptables rules
     Install {
         /// Dry run, do not apply the changes
         #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -412,16 +411,16 @@ pub enum SidecarSubCommand {
         /// The sidecar config file
         #[arg(short, long, value_name = "FILE or URL")]
         file: Option<String>,
-        /// The user that will run the sidecar process using the dedicated user or runuser 
+        /// The user that will run the sidecar process using the dedicated user or runuser
         #[arg(short, long, value_name = "USER")]
         user: String,
     },
-    /// Uninstall transparent proxing of the mesh calls through iptables rules 
+    /// Uninstall transparent proxing of the mesh calls through iptables rules
     Uninstall {
         /// Dry run, do not apply the changes
         #[arg(long, action = clap::ArgAction::SetTrue)]
         dry_run: Option<bool>,
-    }
+    },
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -454,7 +453,7 @@ pub enum Commands {
     /// Manage all the resources (entities) of the current otoroshi cluster
     Resources {
         #[command(subcommand)]
-        command: ResourcesSubCommand
+        command: ResourcesSubCommand,
     },
     /// Manage an otoroshi mesh sidecar
     Sidecar {
@@ -496,17 +495,13 @@ pub enum Commands {
         tunnel: String,
     },
     /// Display the version of the current otoroshi cluster
-    Version {
-    },
+    Version {},
     /// Display the informations about the current otoroshi cluster
-    Infos {
-    },
+    Infos {},
     /// Display the managed entities of the current otoroshi cluster
-    Entities {
-    },
+    Entities {},
     /// Display the health status of the current otoroshi cluster
-    Health {
-    },
+    Health {},
     /// Display metrics of the current otoroshi cluster
     Metrics {
         /// Optional comma separated list of columns to display

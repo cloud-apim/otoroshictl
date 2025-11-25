@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
-use crate::{utils::http::HttpContentKind, cli::cliopts::CliOpts};
+use crate::{cli::cliopts::CliOpts, utils::http::HttpContentKind};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OtoroshiSidecarConfigSpecOtoroshiSettings {
@@ -170,7 +170,6 @@ pub struct OtoroshiSidecarConfigSpecOutboundsSettings {
     pub outbounds: HashMap<String, OtoroshiSidecarConfigSpecOutboundsSettingsOutbound>,
 }
 
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OtoroshiSidecarConfigSpec {
     pub kubernetes: bool,
@@ -182,7 +181,6 @@ pub struct OtoroshiSidecarConfigSpec {
     pub otoroshi: Option<OtoroshiSidecarConfigSpecOtoroshiSettings>,
     pub inbound: OtoroshiSidecarConfigSpecInboundSettings,
     pub outbounds: OtoroshiSidecarConfigSpecOutboundsSettings,
-
 }
 
 impl OtoroshiSidecarConfigSpec {
@@ -190,7 +188,9 @@ impl OtoroshiSidecarConfigSpec {
         match self.otoroshi.clone() {
             None => {
                 // use the current context
-                let config = crate::cli::config::OtoroshiCtlConfig::get_current_config_blocking(opts).to_connection_config();
+                let config =
+                    crate::cli::config::OtoroshiCtlConfig::get_current_config_blocking(opts)
+                        .to_connection_config();
                 OtoroshiSidecarConfigSpecOtoroshiSettings {
                     api_context_name: None,
                     client_cert: config.mtls.map(|mtls| {
@@ -203,69 +203,69 @@ impl OtoroshiSidecarConfigSpec {
                             ca_value: mtls.ca_value,
                         }
                     }),
-                    credentials: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsCredentials { 
-                        client_id: config.cid, 
-                        client_secret: config.csec, 
-                    }), 
-                    location: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsLocation { 
-                        hostname: Some(config.hostname), 
-                        ip_addresses: config.ip_addresses, 
-                        kubernetes: None, 
-                        port: config.port, 
+                    credentials: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsCredentials {
+                        client_id: config.cid,
+                        client_secret: config.csec,
+                    }),
+                    location: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsLocation {
+                        hostname: Some(config.hostname),
+                        ip_addresses: config.ip_addresses,
+                        kubernetes: None,
+                        port: config.port,
                         tls: config.tls,
                     }),
                     routing_location: config.routing_hostname.clone().map(|_| {
-                        OtoroshiSidecarConfigSpecOtoroshiSettingsRoutingLocation { 
-                            hostname: config.routing_hostname.clone(), 
+                        OtoroshiSidecarConfigSpecOtoroshiSettingsRoutingLocation {
+                            hostname: config.routing_hostname.clone(),
                             ip_addresses: config.routing_ip_addresses,
-                            kubernetes: None, 
-                            port: config.routing_port.unwrap(), 
-                            tls: config.routing_tls.unwrap() 
+                            kubernetes: None,
+                            port: config.routing_port.unwrap(),
+                            tls: config.routing_tls.unwrap(),
                         }
                     }),
                 }
-            },
-            Some(otoroshi) => {
-                match otoroshi.api_context_name {
-                    None => otoroshi.clone(),
-                    Some(context) => {
-                        let config = crate::cli::config::OtoroshiCtlConfig::get_current_config_blocking(opts).get_context(context);
-                        OtoroshiSidecarConfigSpecOtoroshiSettings {
-                            api_context_name: None,
-                            client_cert: config.mtls.map(|mtls| {
-                                OtoroshiSidecarConfigSpecOtoroshiSettingsClientCert {
-                                    cert_location: mtls.cert_location,
-                                    cert_value: mtls.cert_value,
-                                    key_location: mtls.key_location,
-                                    key_value: mtls.key_value,
-                                    ca_location: mtls.ca_location,
-                                    ca_value: mtls.ca_value,
-                                }
-                            }),
-                            credentials: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsCredentials { 
-                                client_id: config.cid, 
-                                client_secret: config.csec, 
-                            }), 
-                            location: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsLocation { 
-                                hostname: Some(config.hostname), 
-                                ip_addresses: None, 
-                                kubernetes: None, 
-                                port: config.port, 
-                                tls: config.tls,
-                            }),
-                            routing_location: config.routing_hostname.clone().map(|_| {
-                                OtoroshiSidecarConfigSpecOtoroshiSettingsRoutingLocation { 
-                                    hostname: config.routing_hostname.clone(), 
-                                    ip_addresses: None, 
-                                    kubernetes: None, 
-                                    port: config.routing_port.unwrap(), 
-                                    tls: config.routing_tls.unwrap() 
-                                }
-                            }),
-                        }
+            }
+            Some(otoroshi) => match otoroshi.api_context_name {
+                None => otoroshi.clone(),
+                Some(context) => {
+                    let config =
+                        crate::cli::config::OtoroshiCtlConfig::get_current_config_blocking(opts)
+                            .get_context(context);
+                    OtoroshiSidecarConfigSpecOtoroshiSettings {
+                        api_context_name: None,
+                        client_cert: config.mtls.map(|mtls| {
+                            OtoroshiSidecarConfigSpecOtoroshiSettingsClientCert {
+                                cert_location: mtls.cert_location,
+                                cert_value: mtls.cert_value,
+                                key_location: mtls.key_location,
+                                key_value: mtls.key_value,
+                                ca_location: mtls.ca_location,
+                                ca_value: mtls.ca_value,
+                            }
+                        }),
+                        credentials: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsCredentials {
+                            client_id: config.cid,
+                            client_secret: config.csec,
+                        }),
+                        location: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsLocation {
+                            hostname: Some(config.hostname),
+                            ip_addresses: None,
+                            kubernetes: None,
+                            port: config.port,
+                            tls: config.tls,
+                        }),
+                        routing_location: config.routing_hostname.clone().map(|_| {
+                            OtoroshiSidecarConfigSpecOtoroshiSettingsRoutingLocation {
+                                hostname: config.routing_hostname.clone(),
+                                ip_addresses: None,
+                                kubernetes: None,
+                                port: config.routing_port.unwrap(),
+                                tls: config.routing_tls.unwrap(),
+                            }
+                        }),
                     }
                 }
-            }
+            },
         }
     }
 }
@@ -280,7 +280,6 @@ pub struct OtoroshiSidecarConfig {
 }
 
 impl OtoroshiSidecarConfig {
-
     pub fn default() -> OtoroshiSidecarConfig {
         let mut metadata: HashMap<String, String> = HashMap::new();
         metadata.insert("name".to_string(), "default-sidecar".to_string());
@@ -304,14 +303,18 @@ impl OtoroshiSidecarConfig {
                         port: 443,
                         tls: true,
                     }),
-                    routing_location: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsRoutingLocation {
-                        hostname: Some("otoroshi-routing.oto.tools".to_string()),
-                        ip_addresses: None,
-                        kubernetes: None,
-                        port: 443,
-                        tls: true
-                    }),
-                    credentials: Some(OtoroshiSidecarConfigSpecOtoroshiSettingsCredentials::default()),
+                    routing_location: Some(
+                        OtoroshiSidecarConfigSpecOtoroshiSettingsRoutingLocation {
+                            hostname: Some("otoroshi-routing.oto.tools".to_string()),
+                            ip_addresses: None,
+                            kubernetes: None,
+                            port: 443,
+                            tls: true,
+                        },
+                    ),
+                    credentials: Some(
+                        OtoroshiSidecarConfigSpecOtoroshiSettingsCredentials::default(),
+                    ),
                     client_cert: None,
                 }),
                 inbound: OtoroshiSidecarConfigSpecInboundSettings {
@@ -337,28 +340,38 @@ impl OtoroshiSidecarConfig {
                         algo_out: Some("HS512".to_string()),
                         header_in_name: None,
                         header_out_name: None,
-                    }), 
+                    }),
                 },
                 outbounds: OtoroshiSidecarConfigSpecOutboundsSettings {
                     port: Some(15000),
                     outbounds: {
-                        let mut map: HashMap<String, OtoroshiSidecarConfigSpecOutboundsSettingsOutbound> = HashMap::new();
-                        map.insert("a.oto.tools".to_string(), OtoroshiSidecarConfigSpecOutboundsSettingsOutbound{
-                            hostname: Some("a.otoroshi.mesh".to_string()),
-                            path: Some("/".to_string()),
-                            apikey: Some(OtoroshiSidecarConfigSpecOutboundsSettingsOutboundApikey {
-                                enabled: true,
-                                apikey_id: "an_apikey_id".to_string(),
-                            }),
-                            mtls: Some(OtoroshiSidecarConfigSpecOutboundsSettingsOutboundMtls {
-                                enabled: true,
-                                client_cert_id: "a_cert_id".to_string(),
-                            }),
-                        });
+                        let mut map: HashMap<
+                            String,
+                            OtoroshiSidecarConfigSpecOutboundsSettingsOutbound,
+                        > = HashMap::new();
+                        map.insert(
+                            "a.oto.tools".to_string(),
+                            OtoroshiSidecarConfigSpecOutboundsSettingsOutbound {
+                                hostname: Some("a.otoroshi.mesh".to_string()),
+                                path: Some("/".to_string()),
+                                apikey: Some(
+                                    OtoroshiSidecarConfigSpecOutboundsSettingsOutboundApikey {
+                                        enabled: true,
+                                        apikey_id: "an_apikey_id".to_string(),
+                                    },
+                                ),
+                                mtls: Some(
+                                    OtoroshiSidecarConfigSpecOutboundsSettingsOutboundMtls {
+                                        enabled: true,
+                                        client_cert_id: "a_cert_id".to_string(),
+                                    },
+                                ),
+                            },
+                        );
                         map
-                    }
+                    },
                 },
-            }
+            },
         }
     }
 
@@ -372,30 +385,47 @@ impl OtoroshiSidecarConfig {
 
     pub fn read_from_file(file: &String) -> Result<OtoroshiSidecarConfig, String> {
         if file.ends_with(".json") {
-            serde_json::from_str::<OtoroshiSidecarConfig>(std::fs::read_to_string(file).unwrap().as_str()).map_err(|e| e.to_string())
+            serde_json::from_str::<OtoroshiSidecarConfig>(
+                std::fs::read_to_string(file).unwrap().as_str(),
+            )
+            .map_err(|e| e.to_string())
         } else {
-            serde_yaml::from_str::<OtoroshiSidecarConfig>(std::fs::read_to_string(file).unwrap().as_str()).map_err(|e| e.to_string())
+            serde_yaml::from_str::<OtoroshiSidecarConfig>(
+                std::fs::read_to_string(file).unwrap().as_str(),
+            )
+            .map_err(|e| e.to_string())
         }
     }
 
     pub async fn read_from_url(url: &String, _tls: bool) -> Result<OtoroshiSidecarConfig, String> {
         match crate::utils::http::Http::get(url).await {
-            Err(err) => {
-                std::result::Result::Err(err.to_string())
-            },
-            Ok(content) => {
-                match content.kind {
-                    HttpContentKind::JSON => serde_json::from_slice::<OtoroshiSidecarConfig>(&content.content).map_err(|e| e.to_string()),
-                    HttpContentKind::YAML => serde_yaml::from_slice::<OtoroshiSidecarConfig>(&content.content).map_err(|e| e.to_string()),
+            Err(err) => std::result::Result::Err(err.to_string()),
+            Ok(content) => match content.kind {
+                HttpContentKind::JSON => {
+                    serde_json::from_slice::<OtoroshiSidecarConfig>(&content.content)
+                        .map_err(|e| e.to_string())
                 }
-            }
+                HttpContentKind::YAML => {
+                    serde_yaml::from_slice::<OtoroshiSidecarConfig>(&content.content)
+                        .map_err(|e| e.to_string())
+                }
+            },
         }
     }
 }
 
 #[test]
 fn test_sidecar_config_serde() {
-    let res = serde_yaml::from_str::<OtoroshiSidecarConfig>(std::fs::read_to_string("./src/sidecar/config.yaml").unwrap().as_str()).unwrap();
-    let _ = std::fs::write("./src/sidecar/config-out.yaml", serde_yaml::to_string(&res).unwrap()).unwrap();
+    let res = serde_yaml::from_str::<OtoroshiSidecarConfig>(
+        std::fs::read_to_string("./src/sidecar/config.yaml")
+            .unwrap()
+            .as_str(),
+    )
+    .unwrap();
+    let _ = std::fs::write(
+        "./src/sidecar/config-out.yaml",
+        serde_yaml::to_string(&res).unwrap(),
+    )
+    .unwrap();
     println!("res: {:?}", res)
 }
