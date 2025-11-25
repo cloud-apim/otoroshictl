@@ -1,0 +1,23 @@
+services:
+  otoroshi:
+    image: maif/otoroshi:17.8.1
+    container_name: otoroshi-test
+    ports:
+      - "8080:8080"
+    environment:
+      - OTOROSHI_INITIAL_ADMIN_CLIENT_ID=admin-api-apikey-id
+      - OTOROSHI_INITIAL_ADMIN_CLIENT_SECRET=admin-api-apikey-secret
+      - OTOROSHI_STORAGE=memory
+      - OTOROSHI_LOG_LEVEL=WARN
+      - OTOROSHI_HEALTH_ACCESS_KEY=test-health-key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/.well-known/otoroshi/monitoring/health?access_key=test-health-key"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
