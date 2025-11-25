@@ -57,15 +57,12 @@ pub struct CloudApimLoginResponse {
 
 impl CloudApimToken {
     pub fn read_from_disk() -> Option<CloudApimToken> {
-        match confy::load("io.otoroshi.otoroshictl", Some("cloud_apim_token")) {
-            Err(_) => None,
-            Ok(cfg) => Some(cfg),
-        }
+        confy::load("io.otoroshi.otoroshictl", Some("cloud_apim_token")).ok()
     }
-    pub fn write_to_disk(cfg: CloudApimToken) -> () {
+    pub fn write_to_disk(cfg: CloudApimToken) {
         confy::store("io.otoroshi.otoroshictl", Some("cloud_apim_token"), cfg).unwrap();
     }
-    pub fn delete_from_disk() -> () {
+    pub fn delete_from_disk() {
         let path = confy::get_configuration_file_path("io.otoroshi.otoroshictl", Some("cloud_apim_token")).unwrap();
         let _ = std::fs::remove_file(path);
     }
@@ -240,7 +237,7 @@ impl CloudApimCommands {
                 Ok(mut token) => {
                     let dt = Local::now();
                     let naive_utc = dt.naive_utc();
-                    let offset = dt.offset().clone();
+                    let offset = *dt.offset();
                     let date_time = DateTime::<Local>::from_naive_utc_and_offset(naive_utc, offset);
                     let formatted = format!("{}", date_time.format("%Y-%m-%d %H:%M:%S"));
                     token.created_at = Some(formatted);
@@ -268,7 +265,7 @@ impl CloudApimCommands {
         }
     }
 
-    fn default_display(resources: Vec<CloudApimDeployment>) -> () {
+    fn default_display(resources: Vec<CloudApimDeployment>) {
         let table = resources.into_iter().map(|item| {
             vec![ 
                 //item.uid.cell(), 
@@ -295,7 +292,7 @@ impl CloudApimCommands {
         let _ = print_stdout(table);
     }
 
-    pub async fn display_deployments(cli_opts: CliOpts) -> () {
+    pub async fn display_deployments(cli_opts: CliOpts) {
         let config = crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match config.cloud_apim {
             None => {
@@ -317,17 +314,16 @@ impl CloudApimCommands {
                 };
             }
         };
-        ()
     }
 
-    pub async fn logout(cli_opts: CliOpts) -> () {
+    pub async fn logout(cli_opts: CliOpts) {
         let mut config = crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         config.cloud_apim = None;
         crate::cli::config::OtoroshiCtlConfig::write_current_config(config);
         CloudApimToken::delete_from_disk();
     }
 
-    pub async fn login(cli_opts: CliOpts) -> () {
+    pub async fn login(cli_opts: CliOpts) {
         Self::logout(cli_opts.clone()).await;
         let token: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
@@ -340,7 +336,7 @@ impl CloudApimCommands {
         loop {
             if count == 1 {
                 cli_stdout_printline!("Opening {} in a browser to login and link otoroshictl to your account", console_url);
-                let _ = webbrowser::open(console_url.as_str()).unwrap();
+                webbrowser::open(console_url.as_str()).unwrap();
             } 
             if count > 1 {
                 cli_stdout_printline!("Retrying to link account ...")
@@ -362,12 +358,11 @@ impl CloudApimCommands {
             } else {
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
-            count = count + 1;
+            count += 1;
         };
-        ()
     }
 
-    pub async fn link(cli_opts: CliOpts, name: String, change_current: bool) -> () {
+    pub async fn link(cli_opts: CliOpts, name: String, change_current: bool) {
         let overwrite: bool = false;
         let config = crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match config.cloud_apim {
@@ -384,14 +379,13 @@ impl CloudApimCommands {
                     }, 
                     Some(deployment) => {
                         crate::commands::config::ConfigCommand::import_context(&Some(deployment.link), &overwrite, &change_current, &None, &false, cli_opts.clone()).await;
-                        ()
                     }
                 }
             }
         };
     }
 
-    pub async fn restart(cli_opts: CliOpts, name: String) -> () {
+    pub async fn restart(cli_opts: CliOpts, name: String) {
         let config = crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
         match config.cloud_apim {
             None => {
@@ -408,7 +402,6 @@ impl CloudApimCommands {
                     Some(deployment) => {
                         Self::restart_deployment(deployment.uid, config.clone()).await;
                         cli_stdout_printline!("your deployment '{}' is restarting ...", deployment.name);
-                        ()
                     }
                 }
             }

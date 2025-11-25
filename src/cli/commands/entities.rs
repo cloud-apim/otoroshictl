@@ -32,7 +32,7 @@ pub struct OtoroshExposedResources {
 pub struct EntitiesCommand {}
 
 impl EntitiesCommand {
-    fn default_display(resources: OtoroshExposedResources) -> () {
+    fn default_display(resources: OtoroshExposedResources) {
         let table = resources.resources.into_iter().map(|item| {
             vec![  
                 item.kind.cell(),
@@ -59,7 +59,7 @@ impl EntitiesCommand {
         let _ = print_stdout(table);
     }
 
-    pub async fn display(cli_opts: CliOpts, _command: &Commands) -> () {
+    pub async fn display(cli_opts: CliOpts, _command: &Commands) {
         match Otoroshi::get_exposed_resources(cli_opts.clone()).await {
             None => {
                 cli_stderr_printline!("error while fetching exposed resources");

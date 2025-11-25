@@ -42,12 +42,10 @@ impl RemoteTunnelCommand {
                 } else {
                     format!(":{}", infos.exposed_port_https)
                 }
+            } else if infos.exposed_port_https == 443 {
+                String::from("")
             } else {
-                if infos.exposed_port_https == 443 {
-                    String::from("")
-                } else {
-                    format!(":{}", infos.exposed_port_http)
-                }
+                format!(":{}", infos.exposed_port_http)
             };
             if tunnel_opts.tls {
                 info!("");

@@ -31,7 +31,7 @@ pub struct OtoroshiInfos {
 pub struct InfosCommand {}
 
 impl InfosCommand {
-    fn default_display(infos: OtoroshiInfos) -> () {
+    fn default_display(infos: OtoroshiInfos) {
         let table = vec![
             vec![  
                 infos.otoroshi_cluster_id.cell(),
@@ -54,7 +54,7 @@ impl InfosCommand {
         let _ = print_stdout(table);
     }
 
-    pub async fn display(cli_opts: CliOpts, _command: &Commands) -> () {
+    pub async fn display(cli_opts: CliOpts, _command: &Commands) {
         match Otoroshi::get_infos(cli_opts.clone()).await {
             None => {
                 cli_stderr_printline!("error while fetching cluster infos");

@@ -287,7 +287,7 @@ impl OtoroshiSidecarConfig {
         OtoroshiSidecarConfig {
             api_version: "proxy.otoroshi.io/v1".to_string(),
             kind: "Sidecar".to_string(),
-            metadata: metadata,
+            metadata,
             spec: OtoroshiSidecarConfigSpec {
                 kubernetes: false,
                 dns_integration: true,
@@ -363,9 +363,7 @@ impl OtoroshiSidecarConfig {
     }
 
     pub async fn read_from(path: &String) -> Result<OtoroshiSidecarConfig, String> {
-        if path.starts_with("http://") {
-            Self::read_from_url(path, false).await
-        } else if path.starts_with("https://") {
+        if path.starts_with("http://") || path.starts_with("https://") {
             Self::read_from_url(path, false).await
         } else {
             Self::read_from_file(path)
@@ -383,8 +381,8 @@ impl OtoroshiSidecarConfig {
     pub async fn read_from_url(url: &String, _tls: bool) -> Result<OtoroshiSidecarConfig, String> {
         match crate::utils::http::Http::get(url).await {
             Err(err) => {
-                std::result::Result::Err(format!("{}", err))
-            }, 
+                std::result::Result::Err(err.to_string())
+            },
             Ok(content) => {
                 match content.kind {
                     HttpContentKind::JSON => serde_json::from_slice::<OtoroshiSidecarConfig>(&content.content).map_err(|e| e.to_string()),
