@@ -1,0 +1,174 @@
+name: test-otoroshictl
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: ""
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-lint-
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --tests
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
+
+      - name: Run unit tests
+        run: cargo test --test config_tests --test smoke_tests
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: otoroshictl-linux
+          path: target/release/otoroshictl
+          retention-days: 7
+
+  integration-tests:
+    name: Integration Tests
+    needs: [lint, unit-tests, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      otoroshi:
+        image: maif/otoroshi:17.8.1
+        ports:
+          - 8080:8080
+        env:
+          OTOROSHI_INITIAL_ADMIN_CLIENT_ID: admin-api-apikey-id
+          OTOROSHI_INITIAL_ADMIN_CLIENT_SECRET: admin-api-apikey-secret
+          OTOROSHI_STORAGE: memory
+          OTOROSHI_HEALTH_ACCESS_KEY: test-health-key
+          OTOROSHI_LOG_LEVEL: WARN
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
+
+      - name: Wait for Otoroshi
+        timeout-minutes: 5
+        run: |
+          echo "Waiting for Otoroshi to be ready..."
+          for i in {1..90}; do
+            if curl -sf "http://localhost:8080/.well-known/otoroshi/monitoring/health?access_key=test-health-key" > /dev/null 2>&1; then
+              echo "Otoroshi is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/90 - waiting..."
+            sleep 2
+          done
+          echo "Otoroshi failed to start - checking logs..."
+          docker logs $(docker ps -q --filter ancestor=maif/otoroshi:17.8.1) 2>&1 | tail -50 || true
+          exit 1
+
+      - name: Run integration tests
+        timeout-minutes: 10
+        run: |
+          cargo test --test smoke_tests -- --ignored --test-threads=1
+          cargo test --test resources_tests -- --ignored --test-threads=1
+          cargo test --test e2e_tests -- --ignored --test-threads=1
