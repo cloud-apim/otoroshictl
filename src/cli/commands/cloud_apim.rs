@@ -7,7 +7,8 @@ use http::Method;
 use http::Request;
 use hyper::Client;
 use hyper_rustls::HttpsConnector;
-use rand::{Rng, distributions::Alphanumeric};
+use rand::Rng;
+use rand::distr::Alphanumeric;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -436,7 +437,7 @@ impl CloudApimCommands {
 
     pub async fn login(cli_opts: CliOpts) {
         Self::logout(cli_opts.clone()).await;
-        let token: String = rand::thread_rng()
+        let token: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(32)
             .map(char::from)

@@ -15,12 +15,13 @@ use rustls::{OwnedTrustAnchor, RootCertStore};
 use super::cache::{OtoroshiCertificate, SidecarCache};
 use super::config::OtoroshiSidecarConfig;
 
-use rand::seq::SliceRandom;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+
+use rand::prelude::IndexedRandom;
 
 #[derive(Clone, Debug)]
 struct OutboundProxyClient {
@@ -130,7 +131,7 @@ impl OutboundProxyClient {
                 None => otoroshi_routing_location_clone.hostname.unwrap(),
                 Some(vec) if vec.is_empty() => otoroshi_routing_location_clone.hostname.unwrap(),
                 Some(vec) => vec
-                    .choose(&mut rand::prelude::thread_rng())
+                    .choose(&mut rand::rng())
                     .unwrap()
                     .to_string(),
             };
