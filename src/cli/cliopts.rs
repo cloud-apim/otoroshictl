@@ -451,11 +451,13 @@ pub enum CloudApimSubCommand {
 #[derive(Subcommand, Clone, Debug)]
 pub enum Commands {
     /// Manage all the resources (entities) of the current otoroshi cluster
+    #[clap(visible_alias = "rs")]
     Resources {
         #[command(subcommand)]
         command: ResourcesSubCommand,
     },
     /// Manage an otoroshi mesh sidecar
+    #[clap(visible_alias = "sc")]
     Sidecar {
         #[command(subcommand)]
         command: SidecarSubCommand,
@@ -463,11 +465,13 @@ pub enum Commands {
     /// Manage otoroshi tcp tunnel to access tcp resources through the current otoroshi cluster (not implemented yet)
     TcpTunnel {},
     /// Manage cloud apim clusters
+    #[clap(visible_alias = "ca")]
     CloudApim {
         #[command(subcommand)]
         command: CloudApimSubCommand,
     },
     /// Exposes local processes on the current otoroshi cluster through the otoroshi remote tunnel feature
+    #[clap(visible_alias = "rt")]
     RemoteTunnel {
         /// the local host forwarded to
         #[clap(long, default_value = "localhost")]
@@ -512,6 +516,7 @@ pub enum Commands {
         filters: Option<String>,
     },
     /// Manage all the otoroshi cluster configurations you want to connect to with otoroshictl
+    #[clap(visible_alias = "cfg")]
     Config {
         #[command(subcommand)]
         command: ConfigSubCommand,
