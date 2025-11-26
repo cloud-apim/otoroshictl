@@ -1,11 +1,11 @@
+use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
-use std::time::Duration;
 
+use async_recursion::async_recursion;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use trust_dns_resolver::config::Protocol;
 use trust_dns_resolver::system_conf;
-use async_recursion::async_recursion;
 
 use super::config::OtoroshiSidecarConfig;
 
@@ -757,7 +757,8 @@ impl DnsPacket {
                         DnsRecord::A { domain, addr, .. } if domain == host => Some(addr),
                         _ => None,
                     })
-            }).copied()
+            })
+            .copied()
             // Finally, pick the first valid entry
             .next()
     }
@@ -789,7 +790,10 @@ async fn lookup(qname: &str, qtype: QueryType, server: (Ipv4Addr, u16)) -> Resul
 
     let mut req_buffer = BytePacketBuffer::new();
     packet.write(&mut req_buffer)?;
-    socket.send_to(&req_buffer.buf[0..req_buffer.pos], server).await.unwrap();
+    socket
+        .send_to(&req_buffer.buf[0..req_buffer.pos], server)
+        .await
+        .unwrap();
 
     let mut res_buffer = BytePacketBuffer::new();
     socket.recv_from(&mut res_buffer.buf).await.unwrap();
@@ -798,14 +802,21 @@ async fn lookup(qname: &str, qtype: QueryType, server: (Ipv4Addr, u16)) -> Resul
 }
 
 #[async_recursion]
-async fn recursive_lookup(qname: &str, i_ns_host: Ipv4Addr, i_ns_port: u16, qtype: QueryType) -> Result<DnsPacket> {
-
-    let mut ns_addr = i_ns_host; 
+async fn recursive_lookup(
+    qname: &str,
+    i_ns_host: Ipv4Addr,
+    i_ns_port: u16,
+    qtype: QueryType,
+) -> Result<DnsPacket> {
+    let mut ns_addr = i_ns_host;
     let mut ns_port = i_ns_port;
-    
+
     // Since it might take an arbitrary number of steps, we enter an unbounded loop.
     loop {
-        debug!("attempting lookup of {:?} {} with ns {}:{}", qtype, qname, ns_addr, ns_port);
+        debug!(
+            "attempting lookup of {:?} {} with ns {}:{}",
+            qtype, qname, ns_addr, ns_port
+        );
 
         // The next step is to send the query to the active server.
         let ns_addr_copy = ns_addr;
@@ -844,7 +855,9 @@ async fn recursive_lookup(qname: &str, i_ns_host: Ipv4Addr, i_ns_port: u16, qtyp
         // Here we go down the rabbit hole by starting _another_ lookup sequence in the
         // midst of our current one. Hopefully, this will give us the IP of an appropriate
         // name server.
-        let recursive_response = recursive_lookup(new_ns_name, ns_addr, ns_port, QueryType::A).await.unwrap();
+        let recursive_response = recursive_lookup(new_ns_name, ns_addr, ns_port, QueryType::A)
+            .await
+            .unwrap();
 
         // Finally, we pick a random ip from the result, and restart the loop. If no such
         // record is available, we again return the last result we got.
@@ -857,7 +870,11 @@ async fn recursive_lookup(qname: &str, i_ns_host: Ipv4Addr, i_ns_port: u16, qtyp
     }
 }
 
-async fn handle_query(sidecar_config: OtoroshiSidecarConfig, socket: &UdpSocket, nses: &Vec<(Ipv4Addr, u16)>) -> Result<()> {
+async fn handle_query(
+    sidecar_config: OtoroshiSidecarConfig,
+    socket: &UdpSocket,
+    nses: &Vec<(Ipv4Addr, u16)>,
+) -> Result<()> {
     let mut req_buffer = BytePacketBuffer::new();
     let (_, src) = socket.recv_from(&mut req_buffer.buf).await.unwrap();
 
@@ -871,14 +888,20 @@ async fn handle_query(sidecar_config: OtoroshiSidecarConfig, socket: &UdpSocket,
 
     if let Some(question) = request.questions.pop() {
         debug!("Received query: {:?}", question);
-        let is_oto_mesh = question.name.ends_with(sidecar_config.spec.dns_domain.unwrap_or(".otoroshi.mesh".to_string()).as_str());
+        let is_oto_mesh = question.name.ends_with(
+            sidecar_config
+                .spec
+                .dns_domain
+                .unwrap_or(".otoroshi.mesh".to_string())
+                .as_str(),
+        );
         if is_oto_mesh {
             debug!("domain '{}' is a mesh domain", question.name);
             packet.questions.push(question.clone());
             packet.header.rescode = ResultCode::NOERROR;
-            packet.answers.push(DnsRecord::A { 
-                domain: question.name, 
-                addr: "127.0.0.1".parse::<Ipv4Addr>().unwrap(), 
+            packet.answers.push(DnsRecord::A {
+                domain: question.name,
+                addr: "127.0.0.1".parse::<Ipv4Addr>().unwrap(),
                 ttl: sidecar_config.spec.dns_ttl.unwrap_or(300),
             });
         } else {
@@ -886,11 +909,11 @@ async fn handle_query(sidecar_config: OtoroshiSidecarConfig, socket: &UdpSocket,
             let default_addr: Ipv4Addr = "1.1.1.1".parse::<Ipv4Addr>().unwrap();
             let default_port: u16 = 53;
             let default_value = (default_addr, default_port);
-            let first: &(Ipv4Addr, u16) = nses.first().unwrap_or(&default_value); 
+            let first: &(Ipv4Addr, u16) = nses.first().unwrap_or(&default_value);
             let future = recursive_lookup(&question.name, first.0, first.1, question.qtype);
             if let Ok(timeout_result) = timeout(Duration::from_millis(5000), future).await {
                 if let Ok(result) = timeout_result {
-                debug!("got answer: {:?}", result.header.rescode);
+                    debug!("got answer: {:?}", result.header.rescode);
                     packet.questions.push(question.clone());
                     packet.header.rescode = result.header.rescode;
 
@@ -922,12 +945,15 @@ async fn handle_query(sidecar_config: OtoroshiSidecarConfig, socket: &UdpSocket,
     match packet.write(&mut res_buffer) {
         Err(e) => {
             if e.to_string().contains("End of buffer") {
-                debug!("trying to avoid End of buffer error: {}", packet.answers.len() + packet.authorities.len() + packet.resources.len());
+                debug!(
+                    "trying to avoid End of buffer error: {}",
+                    packet.answers.len() + packet.authorities.len() + packet.resources.len()
+                );
                 let mut res_buffer_fallback = BytePacketBuffer::new();
                 if !packet.answers.is_empty() && packet.answers.len() > 1 {
                     packet.answers.truncate(1);
                 }
-                if !packet.authorities.is_empty() && packet.authorities.len() > 1{
+                if !packet.authorities.is_empty() && packet.authorities.len() > 1 {
                     packet.authorities.truncate(1);
                 }
                 packet.write(&mut res_buffer_fallback)?;
@@ -938,13 +964,13 @@ async fn handle_query(sidecar_config: OtoroshiSidecarConfig, socket: &UdpSocket,
             } else {
                 Err(e)
             }
-        },
+        }
         Ok(_) => {
             let len = res_buffer.pos();
             let data = res_buffer.get_range(0, len)?;
-        
+
             socket.send_to(data, src).await.unwrap();
-        
+
             Ok(())
         }
     }
@@ -952,37 +978,37 @@ async fn handle_query(sidecar_config: OtoroshiSidecarConfig, socket: &UdpSocket,
 
 fn get_default_ns() -> Vec<(Ipv4Addr, u16)> {
     vec![
-        ("198.41.0.4".parse::<Ipv4Addr>().unwrap(), 53),     // a.root-servers.net Verisign, Inc.
-        ("199.9.14.201".parse::<Ipv4Addr>().unwrap(), 53),   // b.root-servers.net University of Southern California,Information Sciences Institute
-        ("192.33.4.12".parse::<Ipv4Addr>().unwrap(), 53),    // c.root-servers.net Cogent Communications
-        ("199.7.91.13".parse::<Ipv4Addr>().unwrap(), 53),    // d.root-servers.net University of Maryland
+        ("198.41.0.4".parse::<Ipv4Addr>().unwrap(), 53), // a.root-servers.net Verisign, Inc.
+        ("199.9.14.201".parse::<Ipv4Addr>().unwrap(), 53), // b.root-servers.net University of Southern California,Information Sciences Institute
+        ("192.33.4.12".parse::<Ipv4Addr>().unwrap(), 53), // c.root-servers.net Cogent Communications
+        ("199.7.91.13".parse::<Ipv4Addr>().unwrap(), 53), // d.root-servers.net University of Maryland
         ("192.203.230.10".parse::<Ipv4Addr>().unwrap(), 53), // e.root-servers.net NASA (Ames Research Center)
-        ("192.5.5.241".parse::<Ipv4Addr>().unwrap(), 53),    // f.root-servers.net Internet Systems Consortium, Inc.
-        ("192.112.36.4".parse::<Ipv4Addr>().unwrap(), 53),   // g.root-servers.net US Department of Defense (NIC)
-        ("198.97.190.53".parse::<Ipv4Addr>().unwrap(), 53),  // h.root-servers.net US Army (Research Lab)
-        ("192.36.148.17".parse::<Ipv4Addr>().unwrap(), 53),  // i.root-servers.net Netnod
-        ("192.58.128.30".parse::<Ipv4Addr>().unwrap(), 53),  // j.root-servers.net Verisign, Inc.
-        ("193.0.14.129".parse::<Ipv4Addr>().unwrap(), 53),   // k.root-servers.net RIPE NCC
-        ("199.7.83.42".parse::<Ipv4Addr>().unwrap(), 53),    // l.root-servers.net ICANN
-        ("202.12.27.33".parse::<Ipv4Addr>().unwrap(), 53),   // m.root-servers.net WIDE Project
-        ("1.0.0.1".parse::<Ipv4Addr>().unwrap(), 53),        // cloudflare
-        ("1.1.1.1".parse::<Ipv4Addr>().unwrap(), 53),        // cloudflare
-        ("8.8.8.8".parse::<Ipv4Addr>().unwrap(), 53),        // google 
-        ("8.8.4.4".parse::<Ipv4Addr>().unwrap(), 53),        // google 
+        ("192.5.5.241".parse::<Ipv4Addr>().unwrap(), 53), // f.root-servers.net Internet Systems Consortium, Inc.
+        ("192.112.36.4".parse::<Ipv4Addr>().unwrap(), 53), // g.root-servers.net US Department of Defense (NIC)
+        ("198.97.190.53".parse::<Ipv4Addr>().unwrap(), 53), // h.root-servers.net US Army (Research Lab)
+        ("192.36.148.17".parse::<Ipv4Addr>().unwrap(), 53), // i.root-servers.net Netnod
+        ("192.58.128.30".parse::<Ipv4Addr>().unwrap(), 53), // j.root-servers.net Verisign, Inc.
+        ("193.0.14.129".parse::<Ipv4Addr>().unwrap(), 53),  // k.root-servers.net RIPE NCC
+        ("199.7.83.42".parse::<Ipv4Addr>().unwrap(), 53),   // l.root-servers.net ICANN
+        ("202.12.27.33".parse::<Ipv4Addr>().unwrap(), 53),  // m.root-servers.net WIDE Project
+        ("1.0.0.1".parse::<Ipv4Addr>().unwrap(), 53),       // cloudflare
+        ("1.1.1.1".parse::<Ipv4Addr>().unwrap(), 53),       // cloudflare
+        ("8.8.8.8".parse::<Ipv4Addr>().unwrap(), 53),       // google
+        ("8.8.4.4".parse::<Ipv4Addr>().unwrap(), 53),       // google
     ]
 }
 
 pub struct DnsServer {}
 
 impl DnsServer {
-
     pub async fn start(dns_port: Option<u16>, sidecar_config: OtoroshiSidecarConfig) -> Result<()> {
         let port: u16 = dns_port.or(sidecar_config.spec.dns_port).unwrap_or(2053);
         let self_address = format!("127.0.0.1:{}", port);
         debug!("starting local dns server on 0.0.0.0:{}", port);
         let socket = UdpSocket::bind(("0.0.0.0", port)).await.unwrap();
         let (conf, _opts) = system_conf::read_system_conf().unwrap();
-        let local_machines_nses: Vec<(Ipv4Addr, u16)> = conf.name_servers()
+        let local_machines_nses: Vec<(Ipv4Addr, u16)> = conf
+            .name_servers()
             .iter()
             .filter(|i| i.protocol == Protocol::Udp)
             .filter(|i| i.socket_addr.is_ipv4())
@@ -991,7 +1017,7 @@ impl DnsServer {
             .map(|i| {
                 let parts: Vec<&str> = i.split(":").collect();
                 let addr = parts[0].parse::<Ipv4Addr>().unwrap();
-                // let addr = "198.41.0.4".parse::<Ipv4Addr>().unwrap(); // testing recursion 
+                // let addr = "198.41.0.4".parse::<Ipv4Addr>().unwrap(); // testing recursion
                 let port = parts[1].parse::<u16>().unwrap();
                 (addr, port)
             })
@@ -999,7 +1025,7 @@ impl DnsServer {
         let default_nses = get_default_ns();
         let mut addresses: Vec<(Ipv4Addr, u16)> = vec![];
         addresses.extend(local_machines_nses);
-        addresses.extend(default_nses); 
+        addresses.extend(default_nses);
         loop {
             match handle_query(sidecar_config.clone(), &socket, &addresses).await {
                 Ok(_) => {}

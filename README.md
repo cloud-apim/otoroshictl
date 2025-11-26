@@ -18,6 +18,34 @@ cargo install otoroshictl
 
 or download a pre-built binary from https://github.com/cloud-apim/otoroshictl/releases
 
+## Testing
+
+The project includes a comprehensive test suite with unit tests and integration tests against a real Otoroshi instance.
+
+### Quick Start
+
+[!WARNING] Tests will overwrite your local configurations if any. Don't run tests on a production setup.
+
+```sh
+# Run unit tests (no Docker required)
+make test
+
+# Run all tests with Otoroshi (Docker required)
+make test-all
+```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `make test` | Run unit tests only (fast) |
+| `make test-unit` | Same as `make test` |
+| `make check` | Run linting, formatting checks and unit tests |
+| `make otoroshi-start` | Start Otoroshi in Docker |
+| `make otoroshi-stop` | Stop Otoroshi |
+| `make test-integration` | Run integration tests (Otoroshi must be running) |
+| `make test-all` | Full workflow: build, start Otoroshi, run all tests, stop |
+
 ## Demo
 
 <p align="center">

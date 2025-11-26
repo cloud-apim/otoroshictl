@@ -1,8 +1,8 @@
-pub mod version;
-pub mod resources;
+pub mod cloud_apim;
+pub mod config;
+pub mod entities;
 pub mod health;
 pub mod infos;
 pub mod metrics;
-pub mod entities;
-pub mod config;
-pub mod cloud_apim;
+pub mod resources;
+pub mod version;
