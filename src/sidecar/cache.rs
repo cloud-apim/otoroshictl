@@ -206,19 +206,23 @@ impl SidecarCache {
             Some(cert) => Some(cert.as_ref().clone()),
             None => {
                 let config = self.otoroshi_config();
-                let res = OtoroshExposedResource{
+                let res = OtoroshExposedResource {
                     kind: "Certificate".to_string(),
                     plural_name: "certificates".to_string(),
                     singular_name: "certificate".to_string(),
                     group: "pki.otoroshi.io".to_string(),
-                    version: OtoroshExposedResourceVersion{
+                    version: OtoroshExposedResourceVersion {
                         name: "v1".to_string(),
                         served: true,
                         deprecated: false,
                         storage: true,
                     },
                 };
-                match crate::utils::otoroshi::Otoroshi::get_one_resource_with_config(res, id, config).await {
+                match crate::utils::otoroshi::Otoroshi::get_one_resource_with_config(
+                    res, id, config,
+                )
+                .await
+                {
                     None => None,
                     Some(resp) => {
                         let cert: OtoroshiCertificate = serde_json::from_value(resp.body).unwrap();
@@ -262,19 +266,23 @@ impl SidecarCache {
             Some(route) => Some(route.as_ref().clone()),
             None => {
                 let config = self.otoroshi_config();
-                let res = OtoroshExposedResource{
+                let res = OtoroshExposedResource {
                     kind: "Route".to_string(),
                     plural_name: "routes".to_string(),
                     singular_name: "route".to_string(),
                     group: "proxy.otoroshi.io".to_string(),
-                    version: OtoroshExposedResourceVersion{
+                    version: OtoroshExposedResourceVersion {
                         name: "v1".to_string(),
                         served: true,
                         deprecated: false,
                         storage: true,
                     },
                 };
-                match crate::utils::otoroshi::Otoroshi::get_one_resource_with_config(res, id, config).await {
+                match crate::utils::otoroshi::Otoroshi::get_one_resource_with_config(
+                    res, id, config,
+                )
+                .await
+                {
                     None => None,
                     Some(resp) => {
                         let route: OtoroshiRoute = serde_json::from_value(resp.body).unwrap();
@@ -318,19 +326,23 @@ impl SidecarCache {
             Some(apikey) => Some(apikey.as_ref().clone()),
             None => {
                 let config = self.otoroshi_config();
-                let res = OtoroshExposedResource{
+                let res = OtoroshExposedResource {
                     kind: "Apikey".to_string(),
                     plural_name: "apikeys".to_string(),
                     singular_name: "apikey".to_string(),
                     group: "apim.otoroshi.io".to_string(),
-                    version: OtoroshExposedResourceVersion{
+                    version: OtoroshExposedResourceVersion {
                         name: "v1".to_string(),
                         served: true,
                         deprecated: false,
                         storage: true,
                     },
                 };
-                match crate::utils::otoroshi::Otoroshi::get_one_resource_with_config(res, id, config).await {
+                match crate::utils::otoroshi::Otoroshi::get_one_resource_with_config(
+                    res, id, config,
+                )
+                .await
+                {
                     None => None,
                     Some(resp) => {
                         let apikey: OtoroshiApikey = serde_json::from_value(resp.body).unwrap();

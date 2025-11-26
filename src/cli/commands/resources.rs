@@ -2,10 +2,10 @@ extern crate json_value_merge;
 
 use crate::cli::cliopts::{CliOpts, ResourcesSubCommand};
 use crate::cli::commands::entities::OtoroshExposedResource;
-use crate::{cli_stdout_printline, cli_stderr_printline};
-use crate::utils::otoroshi::Otoroshi;
 use crate::utils::entity::EntityHelper;
-use crate::utils::table::{TableResource, TableHelper};
+use crate::utils::otoroshi::Otoroshi;
+use crate::utils::table::{TableHelper, TableResource};
+use crate::{cli_stderr_printline, cli_stdout_printline};
 
 use std::collections::HashMap;
 use std::{fs, path::PathBuf};
@@ -15,9 +15,9 @@ use std::vec::Vec;
 use hyper::Method;
 use json_value_merge::Merge;
 
-use serde::{Serialize, Deserialize};
+use notify::{RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
-use notify::{Watcher, RecursiveMode};
 
 use super::entities::OtoroshExposedResources;
 
@@ -45,21 +45,47 @@ impl KubeEntity {
 pub struct ResourcesCommand {}
 
 impl ResourcesCommand {
-
-    async fn handle_json_entity(json: serde_json::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_json_entity(
+        json: serde_json::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let id = EntityHelper::extract_json_entity_id(&json).unwrap();
         let name = EntityHelper::extract_json_entity_name(&json).unwrap();
         let kind: String = json.get("kind").unwrap().as_str().unwrap().to_string();
-        let final_resource: OtoroshExposedResource = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind.to_lowercase() || format!("{}/{}", i.group, i.kind) == kind).unwrap();
+        let final_resource: OtoroshExposedResource = exposed_resources
+            .resources
+            .clone()
+            .into_iter()
+            .find(|i| {
+                i.kind == kind
+                    || i.singular_name == kind.to_lowercase()
+                    || format!("{}/{}", i.group, i.kind) == kind
+            })
+            .unwrap();
         let content = serde_json::to_string(&json).unwrap();
         let config = Otoroshi::get_connection_config(cli_opts.clone()).await;
-        let res = Otoroshi::otoroshi_call(hyper::Method::POST, format!("/apis/{}/{}/{}/{}", final_resource.group, final_resource.version.name, final_resource.plural_name, id).as_str(), None, Some(hyper::Body::from(content)), Some("application/json".to_string()), config).await;
+        let res = Otoroshi::otoroshi_call(
+            hyper::Method::POST,
+            format!(
+                "/apis/{}/{}/{}/{}",
+                final_resource.group, final_resource.version.name, final_resource.plural_name, id
+            )
+            .as_str(),
+            None,
+            Some(hyper::Body::from(content)),
+            Some("application/json".to_string()),
+            config,
+        )
+        .await;
         if res.status == 201 {
             cli_stdout_printline!("  - {}: created", name);
         } else if res.status == 200 {
             match res.headers.get("otoroshi-entity-updated") {
                 Some(v) if v.as_str() == "true" => cli_stdout_printline!("  - {}: updated", name),
-                Some(v) if v.as_str() == "false" => cli_stdout_printline!("  - {}: unchanged", name),
+                Some(v) if v.as_str() == "false" => {
+                    cli_stdout_printline!("  - {}: unchanged", name)
+                }
                 _ => cli_stdout_printline!("  - {}: updated", name),
             };
         } else {
@@ -67,11 +93,24 @@ impl ResourcesCommand {
         }
     }
 
-    async fn delete_json_entity(json: serde_json::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_json_entity(
+        json: serde_json::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let id = EntityHelper::extract_json_entity_id(&json).unwrap();
         let name = EntityHelper::extract_json_entity_name(&json).unwrap();
         let kind: String = json.get("kind").unwrap().as_str().unwrap().to_string();
-        let final_resource: OtoroshExposedResource = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind.to_lowercase() || format!("{}/{}", i.group, i.kind) == kind).unwrap();
+        let final_resource: OtoroshExposedResource = exposed_resources
+            .resources
+            .clone()
+            .into_iter()
+            .find(|i| {
+                i.kind == kind
+                    || i.singular_name == kind.to_lowercase()
+                    || format!("{}/{}", i.group, i.kind) == kind
+            })
+            .unwrap();
         let res = Otoroshi::delete_one_resource(final_resource, id, cli_opts.clone()).await;
         if res {
             cli_stdout_printline!("  - {}: deleted", name);
@@ -80,20 +119,43 @@ impl ResourcesCommand {
         }
     }
 
-    async fn handle_yaml_direct_entity(json: serde_json::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_yaml_direct_entity(
+        json: serde_json::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let id = EntityHelper::extract_json_entity_id(&json).unwrap();
         let name = EntityHelper::extract_json_entity_name(&json).unwrap();
         let kind = json.get("kind").unwrap().as_str().unwrap().to_string();
-        let final_resource: OtoroshExposedResource = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind.to_lowercase()).unwrap();
+        let final_resource: OtoroshExposedResource = exposed_resources
+            .resources
+            .clone()
+            .into_iter()
+            .find(|i| i.kind == kind || i.singular_name == kind.to_lowercase())
+            .unwrap();
         let content = serde_json::to_string(&json).unwrap();
         let config = Otoroshi::get_connection_config(cli_opts.clone()).await;
-        let res = Otoroshi::otoroshi_call(hyper::Method::POST, format!("/apis/{}/{}/{}/{}", final_resource.group, final_resource.version.name, final_resource.plural_name, id).as_str(), None, Some(hyper::Body::from(content)), Some("application/yaml".to_string()), config).await;
+        let res = Otoroshi::otoroshi_call(
+            hyper::Method::POST,
+            format!(
+                "/apis/{}/{}/{}/{}",
+                final_resource.group, final_resource.version.name, final_resource.plural_name, id
+            )
+            .as_str(),
+            None,
+            Some(hyper::Body::from(content)),
+            Some("application/yaml".to_string()),
+            config,
+        )
+        .await;
         if res.status == 201 {
             cli_stdout_printline!("  - {}: created", name);
         } else if res.status == 200 {
             match res.headers.get("otoroshi-entity-updated") {
                 Some(v) if v.as_str() == "true" => cli_stdout_printline!("  - {}: updated", name),
-                Some(v) if v.as_str() == "false" => cli_stdout_printline!("  - {}: unchanged", name),
+                Some(v) if v.as_str() == "false" => {
+                    cli_stdout_printline!("  - {}: unchanged", name)
+                }
                 _ => cli_stdout_printline!("  - {}: updated", name),
             };
         } else {
@@ -101,11 +163,20 @@ impl ResourcesCommand {
         }
     }
 
-    async fn delete_yaml_direct_entity(json: serde_json::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_yaml_direct_entity(
+        json: serde_json::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let id = EntityHelper::extract_json_entity_id(&json).unwrap();
         let name = EntityHelper::extract_json_entity_name(&json).unwrap();
         let kind = json.get("kind").unwrap().as_str().unwrap().to_string();
-        let final_resource: OtoroshExposedResource = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind).unwrap();
+        let final_resource: OtoroshExposedResource = exposed_resources
+            .resources
+            .clone()
+            .into_iter()
+            .find(|i| i.kind == kind || i.singular_name == kind)
+            .unwrap();
         let res = Otoroshi::delete_one_resource(final_resource, id, cli_opts.clone()).await;
         if res {
             cli_stdout_printline!("  - {}: deleted", name);
@@ -114,32 +185,75 @@ impl ResourcesCommand {
         }
     }
 
-    async fn handle_yaml_kube_entity(json: serde_yaml::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_yaml_kube_entity(
+        json: serde_yaml::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let spec = json.get("spec").unwrap();
         let id = EntityHelper::extract_yaml_entity_id(spec).unwrap();
         let metadata = json.get("metadata").unwrap();
-        let name = metadata.get("name").map(|i| i.as_str().unwrap().to_string()).or_else(|| EntityHelper::extract_yaml_entity_name(spec)).unwrap();
+        let name = metadata
+            .get("name")
+            .map(|i| i.as_str().unwrap().to_string())
+            .or_else(|| EntityHelper::extract_yaml_entity_name(spec))
+            .unwrap();
         let kind = json.get("kind").unwrap().as_str().unwrap().to_string();
-        let final_resource: OtoroshExposedResource = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind.to_lowercase()).unwrap();
+        let final_resource: OtoroshExposedResource = exposed_resources
+            .resources
+            .clone()
+            .into_iter()
+            .find(|i| i.kind == kind || i.singular_name == kind.to_lowercase())
+            .unwrap();
         let content = serde_yaml::to_string(spec).unwrap();
         let config = Otoroshi::get_connection_config(cli_opts.clone()).await;
-        let res = Otoroshi::otoroshi_call(hyper::Method::POST, format!("/apis/{}/{}/{}/{}", final_resource.group, final_resource.version.name, final_resource.plural_name, id).as_str(), None, Some(hyper::Body::from(content)), Some("application/yaml".to_string()), config).await;
+        let res = Otoroshi::otoroshi_call(
+            hyper::Method::POST,
+            format!(
+                "/apis/{}/{}/{}/{}",
+                final_resource.group, final_resource.version.name, final_resource.plural_name, id
+            )
+            .as_str(),
+            None,
+            Some(hyper::Body::from(content)),
+            Some("application/yaml".to_string()),
+            config,
+        )
+        .await;
         if res.status == 201 {
             cli_stdout_printline!("  - {}: created", name);
         } else if res.status == 200 {
             cli_stdout_printline!("  - {}: updated", name);
         } else {
-            cli_stdout_printline!("  - {}: error - {} - {:?}", name, res.status, res.body_bytes);
+            cli_stdout_printline!(
+                "  - {}: error - {} - {:?}",
+                name,
+                res.status,
+                res.body_bytes
+            );
         }
     }
 
-    async fn delete_yaml_kube_entity(json: serde_yaml::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_yaml_kube_entity(
+        json: serde_yaml::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let spec = json.get("spec").unwrap();
         let id = EntityHelper::extract_yaml_entity_id(spec).unwrap();
         let metadata = json.get("metadata").unwrap();
-        let name = metadata.get("name").map(|i| i.as_str().unwrap().to_string()).or_else(|| EntityHelper::extract_yaml_entity_name(spec)).unwrap();
+        let name = metadata
+            .get("name")
+            .map(|i| i.as_str().unwrap().to_string())
+            .or_else(|| EntityHelper::extract_yaml_entity_name(spec))
+            .unwrap();
         let kind = json.get("kind").unwrap().as_str().unwrap().to_string();
-        let final_resource: OtoroshExposedResource = exposed_resources.resources.clone().into_iter().find(|i| i.kind == kind || i.singular_name == kind.to_lowercase()).unwrap();
+        let final_resource: OtoroshExposedResource = exposed_resources
+            .resources
+            .clone()
+            .into_iter()
+            .find(|i| i.kind == kind || i.singular_name == kind.to_lowercase())
+            .unwrap();
         let res = Otoroshi::delete_one_resource(final_resource, id, cli_opts.clone()).await;
         if res {
             cli_stdout_printline!("  - {}: deleted", name);
@@ -148,25 +262,39 @@ impl ResourcesCommand {
         }
     }
 
-    async fn handle_yaml_entity(yaml: serde_yaml::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_yaml_entity(
+        yaml: serde_yaml::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         if yaml.get("spec").is_some() && yaml.get("kind").is_some() {
             Self::handle_yaml_kube_entity(yaml, exposed_resources, cli_opts).await;
         } else {
-            let json: serde_json::Value = serde_yaml::from_value::<serde_json::Value>(yaml).unwrap();
+            let json: serde_json::Value =
+                serde_yaml::from_value::<serde_json::Value>(yaml).unwrap();
             Self::handle_yaml_direct_entity(json, exposed_resources, cli_opts).await;
         }
     }
 
-    async fn delete_yaml_entity(yaml: serde_yaml::Value, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_yaml_entity(
+        yaml: serde_yaml::Value,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         if yaml.get("spec").is_some() && yaml.get("kind").is_some() {
             Self::delete_yaml_kube_entity(yaml, exposed_resources, cli_opts).await;
         } else {
-            let json: serde_json::Value = serde_yaml::from_value::<serde_json::Value>(yaml).unwrap();
+            let json: serde_json::Value =
+                serde_yaml::from_value::<serde_json::Value>(yaml).unwrap();
             Self::delete_yaml_direct_entity(json, exposed_resources, cli_opts).await;
         }
     }
 
-    async fn handle_json_file(file: &PathBuf, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_json_file(
+        file: &PathBuf,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let content = fs::read_to_string(file).unwrap();
         let json = serde_json::from_str::<serde_json::Value>(&content).unwrap();
         if json.is_array() {
@@ -178,7 +306,11 @@ impl ResourcesCommand {
         }
     }
 
-    async fn delete_json_file(file: &PathBuf, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_json_file(
+        file: &PathBuf,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let content = fs::read_to_string(file).unwrap();
         let json = serde_json::from_str::<serde_json::Value>(&content).unwrap();
         if json.is_array() {
@@ -190,7 +322,11 @@ impl ResourcesCommand {
         }
     }
 
-    async fn handle_json_body(content: hyper::body::Bytes, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_json_body(
+        content: hyper::body::Bytes,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let json = serde_json::from_slice::<serde_json::Value>(&content).unwrap();
         if json.is_array() {
             for doc in json.as_array().unwrap() {
@@ -201,7 +337,11 @@ impl ResourcesCommand {
         }
     }
 
-    async fn delete_json_body(content: hyper::body::Bytes, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_json_body(
+        content: hyper::body::Bytes,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let json = serde_json::from_slice::<serde_json::Value>(&content).unwrap();
         if json.is_array() {
             for doc in json.as_array().unwrap() {
@@ -212,12 +352,17 @@ impl ResourcesCommand {
         }
     }
 
-    async fn handle_yaml_file(file: PathBuf, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_yaml_file(
+        file: PathBuf,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let content = fs::read_to_string(file).unwrap();
         if content.contains("---\n") {
             for doc in content.split("---\n").filter(|s| !s.trim().is_empty()) {
                 let yaml = serde_yaml::from_str::<serde_yaml::Value>(doc).unwrap();
-                Self::handle_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone()).await;
+                Self::handle_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone())
+                    .await;
             }
         } else {
             let yaml = serde_yaml::from_str::<serde_yaml::Value>(&content).unwrap();
@@ -225,12 +370,17 @@ impl ResourcesCommand {
         }
     }
 
-    async fn delete_yaml_file(file: PathBuf, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_yaml_file(
+        file: PathBuf,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let content = fs::read_to_string(file).unwrap();
         if content.contains("---\n") {
             for doc in content.split("---\n").filter(|s| !s.trim().is_empty()) {
                 let yaml = serde_yaml::from_str::<serde_yaml::Value>(doc).unwrap();
-                Self::delete_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone()).await;
+                Self::delete_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone())
+                    .await;
             }
         } else {
             let yaml = serde_yaml::from_str::<serde_yaml::Value>(&content).unwrap();
@@ -238,12 +388,17 @@ impl ResourcesCommand {
         }
     }
 
-    async fn handle_yaml_body(body: hyper::body::Bytes, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn handle_yaml_body(
+        body: hyper::body::Bytes,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let content: String = String::from_utf8(body.to_vec()).unwrap();
         if content.contains("---\n") {
             for doc in content.split("---\n").filter(|s| !s.trim().is_empty()) {
                 let yaml = serde_yaml::from_str::<serde_yaml::Value>(doc).unwrap();
-                Self::handle_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone()).await;
+                Self::handle_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone())
+                    .await;
             }
         } else {
             let yaml = serde_yaml::from_str::<serde_yaml::Value>(&content).unwrap();
@@ -251,12 +406,17 @@ impl ResourcesCommand {
         }
     }
 
-    async fn delete_yaml_body(body: hyper::body::Bytes, exposed_resources: &OtoroshExposedResources, cli_opts: CliOpts) -> () {
+    async fn delete_yaml_body(
+        body: hyper::body::Bytes,
+        exposed_resources: &OtoroshExposedResources,
+        cli_opts: CliOpts,
+    ) -> () {
         let content: String = String::from_utf8(body.to_vec()).unwrap();
         if content.contains("---\n") {
             for doc in content.split("---\n").filter(|s| !s.trim().is_empty()) {
                 let yaml = serde_yaml::from_str::<serde_yaml::Value>(doc).unwrap();
-                Self::delete_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone()).await;
+                Self::delete_yaml_entity(yaml.to_owned(), exposed_resources, cli_opts.clone())
+                    .await;
             }
         } else {
             let yaml = serde_yaml::from_str::<serde_yaml::Value>(&content).unwrap();
@@ -266,7 +426,9 @@ impl ResourcesCommand {
 
     async fn sync_files(files: Vec<PathBuf>, cli_opts: CliOpts) -> () {
         cli_stdout_printline!("will try to sync {} files ...", files.len());
-        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
+        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone())
+            .await
+            .unwrap();
         for file in files.iter() {
             let fname = file.file_name().unwrap().to_str().unwrap();
             if fname.ends_with(".json") {
@@ -279,7 +441,9 @@ impl ResourcesCommand {
 
     async fn delete_files(files: Vec<PathBuf>, cli_opts: CliOpts) -> () {
         cli_stdout_printline!("will try to delete {} files ...", files.len());
-        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
+        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone())
+            .await
+            .unwrap();
         for file in files.iter() {
             let fname = file.file_name().unwrap().to_str().unwrap();
             if fname.ends_with(".json") {
@@ -291,7 +455,7 @@ impl ResourcesCommand {
     }
 
     async fn fetch_url_http(url: String) -> (hyper::body::Bytes, String) {
-        let req  = hyper::Request::builder()
+        let req = hyper::Request::builder()
             .method(hyper::Method::GET)
             .uri(url.clone())
             .header("accept", "application/json, application/yaml".to_string())
@@ -301,16 +465,23 @@ impl ResourcesCommand {
             Err(err) => {
                 cli_stderr_printline!("error while fetching https resource {}: \n\n{}", url, err);
                 std::process::exit(-1)
-            },
+            }
             Ok(resp) => {
                 let status = resp.status().as_u16();
                 let headers = resp.headers();
-                let content_type = headers.get("content-type").map(|i| i.to_str().unwrap().to_string()).unwrap_or("application/json".to_string());
+                let content_type = headers
+                    .get("content-type")
+                    .map(|i| i.to_str().unwrap().to_string())
+                    .unwrap_or("application/json".to_string());
                 if status == 200 {
                     let body_bytes: hyper::body::Bytes = hyper::body::to_bytes(resp).await.unwrap();
                     (body_bytes, content_type)
                 } else {
-                    cli_stderr_printline!("bad response status {} while fetching https resource {}", status, url);
+                    cli_stderr_printline!(
+                        "bad response status {} while fetching https resource {}",
+                        status,
+                        url
+                    );
                     std::process::exit(-1)
                 }
             }
@@ -318,7 +489,7 @@ impl ResourcesCommand {
     }
 
     async fn fetch_url_https(url: String) -> (hyper::body::Bytes, String) {
-        let req  = hyper::Request::builder()
+        let req = hyper::Request::builder()
             .method(hyper::Method::GET)
             .uri(url.clone())
             .header("accept", "application/json, application/yaml".to_string())
@@ -334,16 +505,23 @@ impl ResourcesCommand {
             Err(err) => {
                 cli_stderr_printline!("error while fetching https resource {}: \n\n{}", url, err);
                 std::process::exit(-1)
-            },
+            }
             Ok(resp) => {
                 let status = resp.status().as_u16();
                 let headers = resp.headers();
-                let content_type = headers.get("content-type").map(|i| i.to_str().unwrap().to_string()).unwrap_or("application/json".to_string());
+                let content_type = headers
+                    .get("content-type")
+                    .map(|i| i.to_str().unwrap().to_string())
+                    .unwrap_or("application/json".to_string());
                 if status == 200 {
                     let body_bytes: hyper::body::Bytes = hyper::body::to_bytes(resp).await.unwrap();
                     (body_bytes, content_type)
                 } else {
-                    cli_stderr_printline!("bad response status {} while fetching https resource {}", status, url);
+                    cli_stderr_printline!(
+                        "bad response status {} while fetching https resource {}",
+                        status,
+                        url
+                    );
                     std::process::exit(-1)
                 }
             }
@@ -353,7 +531,9 @@ impl ResourcesCommand {
     async fn sync_url_http(url: String, cli_opts: CliOpts) -> () {
         cli_stdout_printline!("will try to sync one url ...");
         let (body, content_type) = Self::fetch_url_http(url).await;
-        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
+        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone())
+            .await
+            .unwrap();
         if content_type.starts_with("application/json") {
             Self::handle_json_body(body, &exposed_resources, cli_opts.clone()).await;
         } else if content_type.starts_with("application/yaml") {
@@ -367,7 +547,9 @@ impl ResourcesCommand {
     async fn sync_url_https(url: String, cli_opts: CliOpts) -> () {
         cli_stdout_printline!("will try to sync one url ...");
         let (body, content_type) = Self::fetch_url_https(url).await;
-        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
+        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone())
+            .await
+            .unwrap();
         if content_type.starts_with("application/json") {
             Self::handle_json_body(body, &exposed_resources, cli_opts.clone()).await;
         } else if content_type.starts_with("application/yaml") {
@@ -381,7 +563,9 @@ impl ResourcesCommand {
     async fn delete_url_http(url: String, cli_opts: CliOpts) -> () {
         cli_stdout_printline!("will try to delete one url ...");
         let (body, content_type) = Self::fetch_url_http(url).await;
-        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
+        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone())
+            .await
+            .unwrap();
         if content_type.starts_with("application/json") {
             Self::delete_json_body(body, &exposed_resources, cli_opts.clone()).await;
         } else if content_type.starts_with("application/yaml") {
@@ -395,7 +579,9 @@ impl ResourcesCommand {
     async fn delete_url_https(url: String, cli_opts: CliOpts) -> () {
         cli_stdout_printline!("will try to delete one url ...");
         let (body, content_type) = Self::fetch_url_https(url).await;
-        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
+        let exposed_resources = Otoroshi::get_exposed_resources(cli_opts.clone())
+            .await
+            .unwrap();
         if content_type.starts_with("application/json") {
             Self::delete_json_body(body, &exposed_resources, cli_opts.clone()).await;
         } else if content_type.starts_with("application/yaml") {
@@ -412,39 +598,46 @@ impl ResourcesCommand {
             .max_depth(if recursive { 99999 } else { 0 })
             .follow_links(true)
             .into_iter()
-            .filter_map(|e| e.ok()) {
-                let f_name = entry.file_name().to_string_lossy();
-                if f_name.ends_with(".json") || f_name.ends_with(".yaml") || f_name.ends_with(".yml") {
-                    res.push(entry.into_path());
-                }
+            .filter_map(|e| e.ok())
+        {
+            let f_name = entry.file_name().to_string_lossy();
+            if f_name.ends_with(".json") || f_name.ends_with(".yaml") || f_name.ends_with(".yml") {
+                res.push(entry.into_path());
             }
+        }
         res.to_vec()
     }
 
     fn display_table_of_routes(vec: Vec<TableResource>) {
-        TableHelper::display_table_of_resources_with_custom_columns(vec, vec![
-            "id".to_string(),
-            "name".to_string(),
-            "enabled".to_string(),
-            "debug_flow".to_string(),
-            "capture".to_string(),
-            "frontend.domains".to_string(),
-            "backend.targets".to_string(),
-            "plugins".to_string(),
-        ])
+        TableHelper::display_table_of_resources_with_custom_columns(
+            vec,
+            vec![
+                "id".to_string(),
+                "name".to_string(),
+                "enabled".to_string(),
+                "debug_flow".to_string(),
+                "capture".to_string(),
+                "frontend.domains".to_string(),
+                "backend.targets".to_string(),
+                "plugins".to_string(),
+            ],
+        )
     }
 
     fn display_table_of_resources(kind: String, vec: Vec<TableResource>, columns_raw: Vec<String>) {
         if columns_raw.is_empty() {
             match kind.as_str() {
                 "route" => Self::display_table_of_routes(vec),
-                _       => TableHelper::display_table_of_resources_default(vec),
+                _ => TableHelper::display_table_of_resources_default(vec),
             }
         } else {
-            let columns: Vec<String> = columns_raw.into_iter().flat_map(|col| {
-                let sub_cols: Vec<String> = col.split(",").map(|s| s.to_string()).collect();
-                sub_cols
-            }).collect();
+            let columns: Vec<String> = columns_raw
+                .into_iter()
+                .flat_map(|col| {
+                    let sub_cols: Vec<String> = col.split(",").map(|s| s.to_string()).collect();
+                    sub_cols
+                })
+                .collect();
             TableHelper::display_table_of_resources_with_custom_columns(vec, columns);
         }
     }
@@ -459,38 +652,62 @@ impl ResourcesCommand {
 
     fn run_watch(path: String, dir: bool, recursive: bool, cli_opts: CliOpts) {
         let path_err = path.clone();
-        let mut watcher = notify::recommended_watcher(move |res| {
-            match res {
-                Ok(_) => {
-                    futures::executor::block_on(async {
-                        if dir {
-                            let files = Self::find_files(&PathBuf::from(path_err.to_owned()), recursive);
-                            Self::sync_files(files, cli_opts.clone()).await;
-                        } else {
-                            Self::sync_files(vec![PathBuf::from(path_err.to_owned())], cli_opts.clone()).await;
-                        }
-                    });
-                },
-                Err(e) => {
-                    cli_stderr_printline!("error while watching '{}': {}", path_err, e);
-                },
+        let mut watcher = notify::recommended_watcher(move |res| match res {
+            Ok(_) => {
+                futures::executor::block_on(async {
+                    if dir {
+                        let files =
+                            Self::find_files(&PathBuf::from(path_err.to_owned()), recursive);
+                        Self::sync_files(files, cli_opts.clone()).await;
+                    } else {
+                        Self::sync_files(
+                            vec![PathBuf::from(path_err.to_owned())],
+                            cli_opts.clone(),
+                        )
+                        .await;
+                    }
+                });
             }
-        }).unwrap();
-        watcher.watch(std::path::Path::new(&path.clone()), if recursive { RecursiveMode::Recursive }  else { RecursiveMode::NonRecursive }).unwrap();
+            Err(e) => {
+                cli_stderr_printline!("error while watching '{}': {}", path_err, e);
+            }
+        })
+        .unwrap();
+        watcher
+            .watch(
+                std::path::Path::new(&path.clone()),
+                if recursive {
+                    RecursiveMode::Recursive
+                } else {
+                    RecursiveMode::NonRecursive
+                },
+            )
+            .unwrap();
     }
 
     pub async fn display(cli_opts: CliOpts, command: &ResourcesSubCommand) -> () {
         match command {
-            ResourcesSubCommand::Rbac { file, username, namespace } => {
-                let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                let resources = exposed_resources.resources.into_iter().map(|resource| {
-                    format!("      - {}", resource.plural_name)
-                })
-                .collect::<Vec<String>>()
-                .join("\n");
+            ResourcesSubCommand::Rbac {
+                file,
+                username,
+                namespace,
+            } => {
+                let exposed_resources: OtoroshExposedResources =
+                    Otoroshi::get_exposed_resources(cli_opts.clone())
+                        .await
+                        .unwrap();
+                let resources = exposed_resources
+                    .resources
+                    .into_iter()
+                    .map(|resource| format!("      - {}", resource.plural_name))
+                    .collect::<Vec<String>>()
+                    .join("\n");
                 let final_namespace: String = namespace.to_owned().unwrap_or("default".to_string());
-                let final_username: String = username.to_owned().unwrap_or("otoroshi-admin-user".to_string());
-                let output: String = format!("---
+                let final_username: String = username
+                    .to_owned()
+                    .unwrap_or("otoroshi-admin-user".to_string());
+                let output: String = format!(
+                    "---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
@@ -578,26 +795,44 @@ rules:
       - get
       - list
       - watch
-", final_username, final_username, final_username, final_username, final_namespace, final_username, resources); 
+",
+                    final_username,
+                    final_username,
+                    final_username,
+                    final_username,
+                    final_namespace,
+                    final_username,
+                    resources
+                );
                 match file {
                     None => {
                         cli_stdout_printline!("{}", output)
-                    },
+                    }
                     Some(file) => {
                         if !file.exists() {
                             std::fs::File::create(file).unwrap();
                         } else {
-                            cli_stdout_printline!("'{}' already exists, overwriting its content !", file.to_string_lossy());
+                            cli_stdout_printline!(
+                                "'{}' already exists, overwriting its content !",
+                                file.to_string_lossy()
+                            );
                         }
                         std::fs::write(file, output).unwrap();
                     }
                 }
-            },
+            }
             ResourcesSubCommand::Crds { file } => {
-                let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                let output: String = "---\n".to_owned() + &exposed_resources.resources.into_iter()
-                    .map(|resource| {
-                        format!("apiVersion: \"apiextensions.k8s.io/v1\"
+                let exposed_resources: OtoroshExposedResources =
+                    Otoroshi::get_exposed_resources(cli_opts.clone())
+                        .await
+                        .unwrap();
+                let output: String = "---\n".to_owned()
+                    + &exposed_resources
+                        .resources
+                        .into_iter()
+                        .map(|resource| {
+                            format!(
+                                "apiVersion: \"apiextensions.k8s.io/v1\"
 kind: \"CustomResourceDefinition\"
 metadata:
   name: \"{}.proxy.otoroshi.io\"
@@ -624,263 +859,498 @@ spec:
     schema:
       openAPIV3Schema:
         x-kubernetes-preserve-unknown-fields: true
-        type: \"object\"\n", resource.plural_name, resource.kind, resource.plural_name, resource.singular_name)
-                    })
-                    .collect::<Vec<String>>()
-                    .join("---\n");
+        type: \"object\"\n",
+                                resource.plural_name,
+                                resource.kind,
+                                resource.plural_name,
+                                resource.singular_name
+                            )
+                        })
+                        .collect::<Vec<String>>()
+                        .join("---\n");
                 match file {
                     None => {
                         cli_stdout_printline!("{}", output)
-                    },
+                    }
                     Some(file) => {
                         if !file.exists() {
                             std::fs::File::create(file).unwrap();
                         } else {
-                            cli_stdout_printline!("'{}' already exists, overwriting its content !", file.to_string_lossy());
+                            cli_stdout_printline!(
+                                "'{}' already exists, overwriting its content !",
+                                file.to_string_lossy()
+                            );
                         }
                         std::fs::write(file, output).unwrap();
                     }
                 }
-            },
+            }
             ResourcesSubCommand::Template { resource, kube } => {
                 let resource_name = resource;
-                let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                let exposed_resource = exposed_resources.resources.into_iter()
-                    .find(|r| r.plural_name == *resource_name || r.singular_name == *resource_name || r.kind == *resource_name || format!("{}/{}", r.group, r.kind) == *resource_name)
+                let exposed_resources: OtoroshExposedResources =
+                    Otoroshi::get_exposed_resources(cli_opts.clone())
+                        .await
+                        .unwrap();
+                let exposed_resource = exposed_resources
+                    .resources
+                    .into_iter()
+                    .find(|r| {
+                        r.plural_name == *resource_name
+                            || r.singular_name == *resource_name
+                            || r.kind == *resource_name
+                            || format!("{}/{}", r.group, r.kind) == *resource_name
+                    })
                     .unwrap();
-                match Otoroshi::get_resource_template(exposed_resource.clone(), cli_opts.clone()).await {
+                match Otoroshi::get_resource_template(exposed_resource.clone(), cli_opts.clone())
+                    .await
+                {
                     Some(resp) => {
                         match cli_opts.ouput {
-                            Some(str) => {
-                                match str.as_str() {
-                                    "json" => {
-                                        cli_stdout_printline!("{}", serde_json::to_string(&resp).unwrap())
-                                    },
-                                    "json_pretty" => {
-                                        cli_stdout_printline!("{}", serde_json::to_string_pretty(&resp).unwrap())
-                                    },
-                                    "pretty" => {
-                                        cli_stdout_printline!("{}", serde_json::to_string_pretty(&resp).unwrap())
-                                    },
-                                    "yaml" => {
-                                        if kube.unwrap_or(true) {
-                                            let res_body = resp;
-                                            let res_name = EntityHelper::extract_json_entity_name(&res_body).unwrap();
-                                            let kube_res = KubeEntity::new(exposed_resource.clone().kind.clone(), res_name, res_body);
-                                            cli_stdout_printline!("{}", serde_yaml::to_string(&kube_res).unwrap())
-                                        } else {
-                                            cli_stdout_printline!("{}", serde_yaml::to_string(&resp).unwrap())
-                                        }
-                                    },
-                                    _ => {
-                                        cli_stdout_printline!("{}", serde_yaml::to_string(&resp).unwrap())
-                                    },
+                            Some(str) => match str.as_str() {
+                                "json" => {
+                                    cli_stdout_printline!(
+                                        "{}",
+                                        serde_json::to_string(&resp).unwrap()
+                                    )
+                                }
+                                "json_pretty" => {
+                                    cli_stdout_printline!(
+                                        "{}",
+                                        serde_json::to_string_pretty(&resp).unwrap()
+                                    )
+                                }
+                                "pretty" => {
+                                    cli_stdout_printline!(
+                                        "{}",
+                                        serde_json::to_string_pretty(&resp).unwrap()
+                                    )
+                                }
+                                "yaml" => {
+                                    if kube.unwrap_or(true) {
+                                        let res_body = resp;
+                                        let res_name =
+                                            EntityHelper::extract_json_entity_name(&res_body)
+                                                .unwrap();
+                                        let kube_res = KubeEntity::new(
+                                            exposed_resource.clone().kind.clone(),
+                                            res_name,
+                                            res_body,
+                                        );
+                                        cli_stdout_printline!(
+                                            "{}",
+                                            serde_yaml::to_string(&kube_res).unwrap()
+                                        )
+                                    } else {
+                                        cli_stdout_printline!(
+                                            "{}",
+                                            serde_yaml::to_string(&resp).unwrap()
+                                        )
+                                    }
+                                }
+                                _ => {
+                                    cli_stdout_printline!(
+                                        "{}",
+                                        serde_yaml::to_string(&resp).unwrap()
+                                    )
                                 }
                             },
                             _ => {
                                 cli_stdout_printline!("{}", serde_yaml::to_string(&resp).unwrap())
-                            },
+                            }
                         };
-                    },
+                    }
                     _ => {
                         cli_stderr_printline!("resource {} not found !", resource_name);
                     }
                 }
-            },
-            ResourcesSubCommand::Get { resource, id, columns, kube, page, page_size, filters } => {
+            }
+            ResourcesSubCommand::Get {
+                resource,
+                id,
+                columns,
+                kube,
+                page,
+                page_size,
+                filters,
+            } => {
                 match resource {
                     Some(resource_name) => {
-                        let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                        let exposed_resource = exposed_resources.resources.into_iter()
-                            .find(|r| r.plural_name == *resource_name || r.singular_name == *resource_name || r.kind == *resource_name || format!("{}/{}", r.group, r.kind) == *resource_name)
-                            .unwrap();        
-                        let res_kind = format!("{}/{}", exposed_resource.clone().group, exposed_resource.clone().kind);
+                        let exposed_resources: OtoroshExposedResources =
+                            Otoroshi::get_exposed_resources(cli_opts.clone())
+                                .await
+                                .unwrap();
+                        let exposed_resource = exposed_resources
+                            .resources
+                            .into_iter()
+                            .find(|r| {
+                                r.plural_name == *resource_name
+                                    || r.singular_name == *resource_name
+                                    || r.kind == *resource_name
+                                    || format!("{}/{}", r.group, r.kind) == *resource_name
+                            })
+                            .unwrap();
+                        let res_kind = format!(
+                            "{}/{}",
+                            exposed_resource.clone().group,
+                            exposed_resource.clone().kind
+                        );
                         //let final_resource_name: String = exposed_resource.plural_name;
                         let kind: String = exposed_resource.clone().singular_name;
                         match id {
                             Some(resource_id) => {
-                                match Otoroshi::get_one_resource(exposed_resource.clone(), resource_id.to_string(), cli_opts.clone()).await {
+                                match Otoroshi::get_one_resource(
+                                    exposed_resource.clone(),
+                                    resource_id.to_string(),
+                                    cli_opts.clone(),
+                                )
+                                .await
+                                {
                                     Some(raw_resource) => {
                                         match cli_opts.ouput {
                                             Some(str) => {
                                                 match str.as_str() {
-                                                    "json" => cli_stdout_printline!("{}", serde_json::to_string(&Self::with_kind(&raw_resource.body, res_kind)).unwrap()),
-                                                    "json_pretty" => cli_stdout_printline!("{}", serde_json::to_string_pretty(&Self::with_kind(&raw_resource.body, res_kind)).unwrap()),
+                                                    "json" => cli_stdout_printline!(
+                                                        "{}",
+                                                        serde_json::to_string(&Self::with_kind(
+                                                            &raw_resource.body,
+                                                            res_kind
+                                                        ))
+                                                        .unwrap()
+                                                    ),
+                                                    "json_pretty" => cli_stdout_printline!(
+                                                        "{}",
+                                                        serde_json::to_string_pretty(
+                                                            &Self::with_kind(
+                                                                &raw_resource.body,
+                                                                res_kind
+                                                            )
+                                                        )
+                                                        .unwrap()
+                                                    ),
                                                     "yaml" => {
                                                         if kube.unwrap_or(true) {
                                                             let res_body = raw_resource.body;
                                                             let res_name = EntityHelper::extract_json_entity_name(&res_body).unwrap();
-                                                            let kube_res = KubeEntity::new(res_kind, res_name, res_body);
-                                                            cli_stdout_printline!("{}", serde_yaml::to_string(&kube_res).unwrap())
+                                                            let kube_res = KubeEntity::new(
+                                                                res_kind, res_name, res_body,
+                                                            );
+                                                            cli_stdout_printline!(
+                                                                "{}",
+                                                                serde_yaml::to_string(&kube_res)
+                                                                    .unwrap()
+                                                            )
                                                         } else {
-                                                            cli_stdout_printline!("{}", serde_yaml::to_string(&Self::with_kind(&raw_resource.body, res_kind)).unwrap())
+                                                            cli_stdout_printline!(
+                                                                "{}",
+                                                                serde_yaml::to_string(
+                                                                    &Self::with_kind(
+                                                                        &raw_resource.body,
+                                                                        res_kind
+                                                                    )
+                                                                )
+                                                                .unwrap()
+                                                            )
                                                         }
-                                                    },
+                                                    }
                                                     _ => {
                                                         let vec = vec![TableResource {
                                                             raw: raw_resource.body,
                                                         }];
-                                                        Self::display_table_of_resources(kind.to_string(), vec, columns.to_vec())
-                                                    },
+                                                        Self::display_table_of_resources(
+                                                            kind.to_string(),
+                                                            vec,
+                                                            columns.to_vec(),
+                                                        )
+                                                    }
                                                 }
-                                            },
+                                            }
                                             _ => {
                                                 let vec = vec![TableResource {
                                                     raw: raw_resource.body,
                                                 }];
-                                                Self::display_table_of_resources(kind.to_string(), vec, columns.to_vec())
-                                            },
+                                                Self::display_table_of_resources(
+                                                    kind.to_string(),
+                                                    vec,
+                                                    columns.to_vec(),
+                                                )
+                                            }
                                         };
-                                    },
+                                    }
                                     None => {
-                                        cli_stdout_printline!("resource {} with id {} not found", resource_name, resource_id)
+                                        cli_stdout_printline!(
+                                            "resource {} with id {} not found",
+                                            resource_name,
+                                            resource_id
+                                        )
                                     }
                                 }
-                            },
+                            }
                             None => {
-                                match Otoroshi::get_resources(exposed_resource.clone(), page.unwrap_or(1), page_size.unwrap_or(99999), filters.to_vec(), cli_opts.clone()).await {
+                                match Otoroshi::get_resources(
+                                    exposed_resource.clone(),
+                                    page.unwrap_or(1),
+                                    page_size.unwrap_or(99999),
+                                    filters.to_vec(),
+                                    cli_opts.clone(),
+                                )
+                                .await
+                                {
                                     Some(raw_resources) => {
                                         match cli_opts.ouput {
-                                            Some(str) => {
-                                                match str.as_str() {
-                                                    "json" => {
-                                                        let items: Vec<serde_json::Value> = raw_resources.body.into_iter().map(|v| Self::with_kind(&v, res_kind.to_string())).collect();
-                                                        cli_stdout_printline!("{}", serde_json::to_string(&items).unwrap())
-                                                    },
-                                                    "json_pretty" => {
-                                                        let items: Vec<serde_json::Value> = raw_resources.body.into_iter().map(|v| Self::with_kind(&v, res_kind.to_string())).collect();
-                                                        cli_stdout_printline!("{}", serde_json::to_string_pretty(&items).unwrap())
-                                                    },
-                                                    "yaml" => {
-                                                        if kube.unwrap_or(true) {
-                                                            let kube_entities: Vec<KubeEntity> = raw_resources.body.into_iter().map(|res_body| {
+                                            Some(str) => match str.as_str() {
+                                                "json" => {
+                                                    let items: Vec<serde_json::Value> =
+                                                        raw_resources
+                                                            .body
+                                                            .into_iter()
+                                                            .map(|v| {
+                                                                Self::with_kind(
+                                                                    &v,
+                                                                    res_kind.to_string(),
+                                                                )
+                                                            })
+                                                            .collect();
+                                                    cli_stdout_printline!(
+                                                        "{}",
+                                                        serde_json::to_string(&items).unwrap()
+                                                    )
+                                                }
+                                                "json_pretty" => {
+                                                    let items: Vec<serde_json::Value> =
+                                                        raw_resources
+                                                            .body
+                                                            .into_iter()
+                                                            .map(|v| {
+                                                                Self::with_kind(
+                                                                    &v,
+                                                                    res_kind.to_string(),
+                                                                )
+                                                            })
+                                                            .collect();
+                                                    cli_stdout_printline!(
+                                                        "{}",
+                                                        serde_json::to_string_pretty(&items)
+                                                            .unwrap()
+                                                    )
+                                                }
+                                                "yaml" => {
+                                                    if kube.unwrap_or(true) {
+                                                        let kube_entities: Vec<KubeEntity> = raw_resources.body.into_iter().map(|res_body| {
                                                                 let res_name = EntityHelper::extract_json_entity_name(&res_body).unwrap();
                                                                 KubeEntity::new(res_kind.clone(), res_name, res_body)
                                                             }).collect();
-                                                            cli_stdout_printline!("{}", serde_yaml::to_string(&kube_entities).unwrap())
-                                                        } else {
-                                                            let items: Vec<serde_json::Value> = raw_resources.body.into_iter().map(|v| Self::with_kind(&v, res_kind.to_string())).collect();
-                                                            cli_stdout_printline!("{}", serde_yaml::to_string(&items).unwrap())
-                                                        }
-                                                    },
-                                                    _ => {
-                                                        let vec = raw_resources.body.into_iter().map(|item| {
-                                                            TableResource {
-                                                                raw: item
-                                                            }
-                                                        }).collect();
-                                                        Self::display_table_of_resources(kind, vec, columns.to_vec());
-                                                    },
+                                                        cli_stdout_printline!(
+                                                            "{}",
+                                                            serde_yaml::to_string(&kube_entities)
+                                                                .unwrap()
+                                                        )
+                                                    } else {
+                                                        let items: Vec<serde_json::Value> =
+                                                            raw_resources
+                                                                .body
+                                                                .into_iter()
+                                                                .map(|v| {
+                                                                    Self::with_kind(
+                                                                        &v,
+                                                                        res_kind.to_string(),
+                                                                    )
+                                                                })
+                                                                .collect();
+                                                        cli_stdout_printline!(
+                                                            "{}",
+                                                            serde_yaml::to_string(&items).unwrap()
+                                                        )
+                                                    }
+                                                }
+                                                _ => {
+                                                    let vec = raw_resources
+                                                        .body
+                                                        .into_iter()
+                                                        .map(|item| TableResource { raw: item })
+                                                        .collect();
+                                                    Self::display_table_of_resources(
+                                                        kind,
+                                                        vec,
+                                                        columns.to_vec(),
+                                                    );
                                                 }
                                             },
                                             _ => {
-                                                let vec = raw_resources.body.into_iter().map(|item| {
-                                                    TableResource {
-                                                        raw: item
-                                                    }
-                                                }).collect();
-                                                Self::display_table_of_resources(kind, vec, columns.to_vec());
-                                            },
+                                                let vec = raw_resources
+                                                    .body
+                                                    .into_iter()
+                                                    .map(|item| TableResource { raw: item })
+                                                    .collect();
+                                                Self::display_table_of_resources(
+                                                    kind,
+                                                    vec,
+                                                    columns.to_vec(),
+                                                );
+                                            }
                                         };
-                                    },
+                                    }
                                     None => {
-                                        cli_stdout_printline!("resources {} not found", resource_name)
+                                        cli_stdout_printline!(
+                                            "resources {} not found",
+                                            resource_name
+                                        )
                                     }
                                 }
                             }
                         }
-                    },
+                    }
                     None => {
                         print!("no resource specified")
                     }
                 }
-            },
-            ResourcesSubCommand::Delete { resource, ids, file, directory, recursive } => {
-                match resource {
-                    Some(resource) => {
-                        let final_resource_name: String = if resource.ends_with("s") {
-                            resource.to_string()
-                        } else {
-                            format!("{}s", resource)
-                        };
-                        let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                        let exposed_resource = exposed_resources.resources.into_iter()
-                            .find(|r| r.plural_name == final_resource_name || r.singular_name == final_resource_name || r.kind == final_resource_name || format!("{}/{}", r.group, r.kind) == final_resource_name)
-                            .unwrap();   
-                        let mut failed_results: Vec<String> = Vec::new();
-                        for id in ids.iter() {
-                            let res = Otoroshi::delete_one_resource(exposed_resource.clone(), id.to_string(), cli_opts.clone()).await;
-                            if !res {
-                                failed_results.push(id.to_string());
-                            }
-                        }
-                        if !failed_results.is_empty() {
-                            let print_ids: Vec<String> = failed_results.into_iter().map(|s| format!("  - {}", s)).collect();
-                            cli_stdout_printline!("failed to delete the following {}\n", final_resource_name);
-                            cli_stdout_printline!("{}\n", print_ids.join("\n"))
-                        }
-                    },
-                    None => {
-                        match file {
-                            None => {
-                                match directory {
-                                    None => cli_stdout_printline!("you need to provide a file or directory path"),
-                                    Some(directory) => {
-                                        let files = Self::find_files(directory, recursive.unwrap_or(false));
-                                        Self::delete_files(files, cli_opts.clone()).await
-                                    }
-                                }
-                            },
-                            Some(file) => {
-                                if file.starts_with("http://") || file.starts_with("https://") {
-                                    if file.starts_with("http://") {
-                                        Self::delete_url_http(file.to_owned(), cli_opts.clone()).await;
-                                    } else if file.starts_with("https://") {
-                                        Self::delete_url_https(file.to_owned(), cli_opts.clone()).await;
-                                    }
-                                } else {
-                                    Self::delete_files(vec![PathBuf::from(file.to_owned())], cli_opts.clone()).await
-                                }
-                            }
+            }
+            ResourcesSubCommand::Delete {
+                resource,
+                ids,
+                file,
+                directory,
+                recursive,
+            } => match resource {
+                Some(resource) => {
+                    let final_resource_name: String = if resource.ends_with("s") {
+                        resource.to_string()
+                    } else {
+                        format!("{}s", resource)
+                    };
+                    let exposed_resources: OtoroshExposedResources =
+                        Otoroshi::get_exposed_resources(cli_opts.clone())
+                            .await
+                            .unwrap();
+                    let exposed_resource = exposed_resources
+                        .resources
+                        .into_iter()
+                        .find(|r| {
+                            r.plural_name == final_resource_name
+                                || r.singular_name == final_resource_name
+                                || r.kind == final_resource_name
+                                || format!("{}/{}", r.group, r.kind) == final_resource_name
+                        })
+                        .unwrap();
+                    let mut failed_results: Vec<String> = Vec::new();
+                    for id in ids.iter() {
+                        let res = Otoroshi::delete_one_resource(
+                            exposed_resource.clone(),
+                            id.to_string(),
+                            cli_opts.clone(),
+                        )
+                        .await;
+                        if !res {
+                            failed_results.push(id.to_string());
                         }
                     }
+                    if !failed_results.is_empty() {
+                        let print_ids: Vec<String> = failed_results
+                            .into_iter()
+                            .map(|s| format!("  - {}", s))
+                            .collect();
+                        cli_stdout_printline!(
+                            "failed to delete the following {}\n",
+                            final_resource_name
+                        );
+                        cli_stdout_printline!("{}\n", print_ids.join("\n"))
+                    }
                 }
+                None => match file {
+                    None => match directory {
+                        None => {
+                            cli_stdout_printline!("you need to provide a file or directory path")
+                        }
+                        Some(directory) => {
+                            let files = Self::find_files(directory, recursive.unwrap_or(false));
+                            Self::delete_files(files, cli_opts.clone()).await
+                        }
+                    },
+                    Some(file) => {
+                        if file.starts_with("http://") || file.starts_with("https://") {
+                            if file.starts_with("http://") {
+                                Self::delete_url_http(file.to_owned(), cli_opts.clone()).await;
+                            } else if file.starts_with("https://") {
+                                Self::delete_url_https(file.to_owned(), cli_opts.clone()).await;
+                            }
+                        } else {
+                            Self::delete_files(
+                                vec![PathBuf::from(file.to_owned())],
+                                cli_opts.clone(),
+                            )
+                            .await
+                        }
+                    }
+                },
             },
-            ResourcesSubCommand::Create { resource, file, data, input, stdin } => {
+            ResourcesSubCommand::Create {
+                resource,
+                file,
+                data,
+                input,
+                stdin,
+            } => {
                 let final_resource_name: String = if resource.ends_with("s") {
                     resource.to_string()
                 } else {
                     format!("{}s", resource)
                 };
-                let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                let exposed_resource = exposed_resources.resources.into_iter()
-                    .find(|r| r.plural_name == final_resource_name || r.singular_name == final_resource_name || r.kind == final_resource_name || format!("{}/{}", r.group, r.kind) == final_resource_name)
-                    .unwrap();   
+                let exposed_resources: OtoroshExposedResources =
+                    Otoroshi::get_exposed_resources(cli_opts.clone())
+                        .await
+                        .unwrap();
+                let exposed_resource = exposed_resources
+                    .resources
+                    .into_iter()
+                    .find(|r| {
+                        r.plural_name == final_resource_name
+                            || r.singular_name == final_resource_name
+                            || r.kind == final_resource_name
+                            || format!("{}/{}", r.group, r.kind) == final_resource_name
+                    })
+                    .unwrap();
                 match file {
                     Some(file) => {
-                        match crate::utils::file::FileHelper::get_content_string_result(file).await {
+                        match crate::utils::file::FileHelper::get_content_string_result(file).await
+                        {
                             Err(e) => {
                                 cli_stderr_printline!("error while reading {:?}: {}", file, e);
                                 std::process::exit(-1)
-                            },
+                            }
                             Ok(content) => {
                                 let is_yaml = !content.trim().starts_with("{");
                                 if is_yaml {
-                                    let mut json = serde_yaml::from_str::<serde_json::Value>(&content).unwrap();
-                                    let is_kube = json.get("apiVersion").is_some() && json.get("spec").is_some();
+                                    let mut json =
+                                        serde_yaml::from_str::<serde_json::Value>(&content)
+                                            .unwrap();
+                                    let is_kube = json.get("apiVersion").is_some()
+                                        && json.get("spec").is_some();
                                     if is_kube {
                                         json = json.get("spec").unwrap().clone();
                                     }
-                                    let id: String = EntityHelper::extract_json_entity_id(&json).unwrap();
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id, serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
+                                    let id: String =
+                                        EntityHelper::extract_json_entity_id(&json).unwrap();
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id,
+                                        serde_json::to_string(&json).unwrap(),
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 } else {
-                                    let json = serde_json::from_str::<serde_json::Value>(&content).unwrap();
+                                    let json = serde_json::from_str::<serde_json::Value>(&content)
+                                        .unwrap();
                                     let id = EntityHelper::extract_json_entity_id(&json).unwrap();
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id, content, cli_opts.clone()).await;
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id,
+                                        content,
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 }
                             }
                         }
-                    },
+                    }
                     _ => {
                         if data.is_empty() {
                             if input.is_none() {
@@ -892,99 +1362,195 @@ spec:
                                 };
                                 let is_yaml = !edited.trim().starts_with("{");
                                 if is_yaml {
-                                    let mut json = serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
-                                    let is_kube = json.get("apiVersion").is_some() && json.get("spec").is_some();
+                                    let mut json =
+                                        serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
+                                    let is_kube = json.get("apiVersion").is_some()
+                                        && json.get("spec").is_some();
                                     if is_kube {
                                         json = json.get("spec").unwrap().clone();
                                     }
-                                    let id: String = EntityHelper::extract_json_entity_id(&json).unwrap();
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
+                                    let id: String =
+                                        EntityHelper::extract_json_entity_id(&json).unwrap();
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id.to_string(),
+                                        serde_json::to_string(&json).unwrap(),
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 } else {
-                                    let json = serde_json::from_str::<serde_json::Value>(&edited).unwrap();
-                                    let id: String = EntityHelper::extract_json_entity_id(&json).unwrap();
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), edited, cli_opts.clone()).await;
+                                    let json =
+                                        serde_json::from_str::<serde_json::Value>(&edited).unwrap();
+                                    let id: String =
+                                        EntityHelper::extract_json_entity_id(&json).unwrap();
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id.to_string(),
+                                        edited,
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 }
                             } else {
                                 let edited = input.clone().unwrap();
                                 let is_yaml = !edited.trim().starts_with("{");
                                 if is_yaml {
-                                    let mut json = serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
-                                    let is_kube = json.get("apiVersion").is_some() && json.get("spec").is_some();
+                                    let mut json =
+                                        serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
+                                    let is_kube = json.get("apiVersion").is_some()
+                                        && json.get("spec").is_some();
                                     if is_kube {
                                         json = json.get("spec").unwrap().clone();
                                     }
                                     let id = EntityHelper::extract_json_entity_id(&json).unwrap();
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id.to_string(),
+                                        serde_json::to_string(&json).unwrap(),
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 } else {
                                     let json = serde_json::from_str(&edited).unwrap();
                                     let id = EntityHelper::extract_json_entity_id(&json).unwrap();
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), edited, cli_opts.clone()).await;
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id.to_string(),
+                                        edited,
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 }
                             }
                         } else {
-                            let serie: String = data.iter()
+                            let serie: String = data
+                                .iter()
                                 .filter(|str| str.contains('='))
                                 .map(|str| {
-                                    let parts: Vec<String> = str.split('=').map(|s| s.to_string()).collect();
+                                    let parts: Vec<String> =
+                                        str.split('=').map(|s| s.to_string()).collect();
                                     let path = parts.first().unwrap();
                                     let mut value = parts.get(1).unwrap().to_string();
                                     if value.starts_with('\'') && value.ends_with('\'') {
-                                        value = value.strip_suffix('\'').unwrap().strip_prefix('\'').unwrap().to_string();
+                                        value = value
+                                            .strip_suffix('\'')
+                                            .unwrap()
+                                            .strip_prefix('\'')
+                                            .unwrap()
+                                            .to_string();
                                     };
                                     if value.starts_with('"') && value.ends_with('"') {
-                                        value = value.strip_suffix('"').unwrap().strip_prefix('"').unwrap().to_string();
+                                        value = value
+                                            .strip_suffix('"')
+                                            .unwrap()
+                                            .strip_prefix('"')
+                                            .unwrap()
+                                            .to_string();
                                     };
-                                    serde_json::to_string(&serde_json::json!({ "path": path, "value": value })).unwrap()
+                                    serde_json::to_string(
+                                        &serde_json::json!({ "path": path, "value": value }),
+                                    )
+                                    .unwrap()
                                 })
                                 .collect::<Vec<String>>()
                                 .join(",");
-                            let _ = Otoroshi::create_one_resource_with_content_type(exposed_resource.clone(), format!("[{}]", serie), "application/json+oto-patch".to_string(), cli_opts.clone()).await;
+                            let _ = Otoroshi::create_one_resource_with_content_type(
+                                exposed_resource.clone(),
+                                format!("[{}]", serie),
+                                "application/json+oto-patch".to_string(),
+                                cli_opts.clone(),
+                            )
+                            .await;
                         }
                     }
                 }
-            },
-            ResourcesSubCommand::Edit { resource, id, file, data, input, stdin } => {
+            }
+            ResourcesSubCommand::Edit {
+                resource,
+                id,
+                file,
+                data,
+                input,
+                stdin,
+            } => {
                 let final_resource_name: String = if resource.ends_with("s") {
                     resource.to_string()
                 } else {
                     format!("{}s", resource)
                 };
-                let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                let exposed_resource = exposed_resources.resources.into_iter()
-                    .find(|r| r.plural_name == final_resource_name || r.singular_name == final_resource_name || r.kind == final_resource_name || format!("{}/{}", r.group, r.kind) == final_resource_name)
-                    .unwrap();   
+                let exposed_resources: OtoroshExposedResources =
+                    Otoroshi::get_exposed_resources(cli_opts.clone())
+                        .await
+                        .unwrap();
+                let exposed_resource = exposed_resources
+                    .resources
+                    .into_iter()
+                    .find(|r| {
+                        r.plural_name == final_resource_name
+                            || r.singular_name == final_resource_name
+                            || r.kind == final_resource_name
+                            || format!("{}/{}", r.group, r.kind) == final_resource_name
+                    })
+                    .unwrap();
                 match file {
                     Some(file) => {
-                        match crate::utils::file::FileHelper::get_content_string_result(file).await {
+                        match crate::utils::file::FileHelper::get_content_string_result(file).await
+                        {
                             Err(e) => {
                                 cli_stderr_printline!("error while reading {:?}: {}", file, e);
                                 std::process::exit(-1)
-                            },
+                            }
                             Ok(content) => {
                                 let is_yaml = !content.trim().starts_with("{");
                                 if is_yaml {
-                                    let mut json = serde_yaml::from_str::<serde_json::Value>(&content).unwrap();
-                                    let is_kube = json.get("apiVersion").is_some() && json.get("spec").is_some();
+                                    let mut json =
+                                        serde_yaml::from_str::<serde_json::Value>(&content)
+                                            .unwrap();
+                                    let is_kube = json.get("apiVersion").is_some()
+                                        && json.get("spec").is_some();
                                     if is_kube {
                                         json = json.get("spec").unwrap().clone();
                                     }
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id.to_string(),
+                                        serde_json::to_string(&json).unwrap(),
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 } else {
-                                    let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), content, cli_opts.clone()).await;
+                                    let _ = Otoroshi::upsert_one_resource(
+                                        exposed_resource.clone(),
+                                        id.to_string(),
+                                        content,
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 }
                             }
                         }
-                    },
+                    }
                     _ => {
-                        match Otoroshi::get_one_resource(exposed_resource.clone(), id.to_string(), cli_opts.clone()).await {
+                        match Otoroshi::get_one_resource(
+                            exposed_resource.clone(),
+                            id.to_string(),
+                            cli_opts.clone(),
+                        )
+                        .await
+                        {
                             None => {
-                                cli_stderr_printline!("error while fetching entity {}/{}", final_resource_name, id);
+                                cli_stderr_printline!(
+                                    "error while fetching entity {}/{}",
+                                    final_resource_name,
+                                    id
+                                );
                                 std::process::exit(-1)
-                            },
+                            }
                             Some(res) => {
                                 if data.is_empty() {
                                     if input.is_none() {
-                                        let to_edit = serde_json::to_string_pretty(&res.body).unwrap();
+                                        let to_edit =
+                                            serde_json::to_string_pretty(&res.body).unwrap();
                                         let edited = if *stdin {
                                             std::io::read_to_string(std::io::stdin()).unwrap()
                                         } else {
@@ -992,27 +1558,57 @@ spec:
                                         };
                                         let is_yaml = !edited.trim().starts_with("{");
                                         if is_yaml {
-                                            let mut json = serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
-                                            let is_kube = json.get("apiVersion").is_some() && json.get("spec").is_some();
+                                            let mut json =
+                                                serde_yaml::from_str::<serde_json::Value>(&edited)
+                                                    .unwrap();
+                                            let is_kube = json.get("apiVersion").is_some()
+                                                && json.get("spec").is_some();
                                             if is_kube {
                                                 json = json.get("spec").unwrap().clone();
                                             }
-                                            let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
+                                            let _ = Otoroshi::upsert_one_resource(
+                                                exposed_resource.clone(),
+                                                id.to_string(),
+                                                serde_json::to_string(&json).unwrap(),
+                                                cli_opts.clone(),
+                                            )
+                                            .await;
                                         } else {
-                                            let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), edited, cli_opts.clone()).await;
+                                            let _ = Otoroshi::upsert_one_resource(
+                                                exposed_resource.clone(),
+                                                id.to_string(),
+                                                edited,
+                                                cli_opts.clone(),
+                                            )
+                                            .await;
                                         }
                                     } else {
                                         let edited = input.clone().unwrap();
                                         let is_yaml = !edited.trim().starts_with("{");
                                         if is_yaml {
-                                            let mut json = serde_yaml::from_str::<serde_json::Value>(&edited).unwrap();
-                                            let is_kube = json.get("apiVersion").is_some() && json.get("spec").is_some();
+                                            let mut json =
+                                                serde_yaml::from_str::<serde_json::Value>(&edited)
+                                                    .unwrap();
+                                            let is_kube = json.get("apiVersion").is_some()
+                                                && json.get("spec").is_some();
                                             if is_kube {
                                                 json = json.get("spec").unwrap().clone();
                                             }
-                                            let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), serde_json::to_string(&json).unwrap(), cli_opts.clone()).await;
+                                            let _ = Otoroshi::upsert_one_resource(
+                                                exposed_resource.clone(),
+                                                id.to_string(),
+                                                serde_json::to_string(&json).unwrap(),
+                                                cli_opts.clone(),
+                                            )
+                                            .await;
                                         } else {
-                                            let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), edited, cli_opts.clone()).await;
+                                            let _ = Otoroshi::upsert_one_resource(
+                                                exposed_resource.clone(),
+                                                id.to_string(),
+                                                edited,
+                                                cli_opts.clone(),
+                                            )
+                                            .await;
                                         }
                                     }
                                 } else {
@@ -1032,29 +1628,63 @@ spec:
                                         })
                                         .collect::<Vec<String>>()
                                         .join(",");
-                                    let _ = Otoroshi::upsert_one_resource_with_content_type(exposed_resource.clone(), id.to_string(), format!("[{}]", serie), "application/json+oto-patch".to_string(), cli_opts.clone()).await;
+                                    let _ = Otoroshi::upsert_one_resource_with_content_type(
+                                        exposed_resource.clone(),
+                                        id.to_string(),
+                                        format!("[{}]", serie),
+                                        "application/json+oto-patch".to_string(),
+                                        cli_opts.clone(),
+                                    )
+                                    .await;
                                 }
                             }
                         }
                     }
                 }
-            },
-            ResourcesSubCommand::Patch { resource, id, merge, file, data, stdin } => {
+            }
+            ResourcesSubCommand::Patch {
+                resource,
+                id,
+                merge,
+                file,
+                data,
+                stdin,
+            } => {
                 // TODO: handle json patch
                 let final_resource_name: String = if resource.ends_with("s") {
                     resource.to_string()
                 } else {
                     format!("{}s", resource)
                 };
-                let exposed_resources: OtoroshExposedResources = Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap();
-                let exposed_resource = exposed_resources.resources.into_iter()
-                    .find(|r| r.plural_name == final_resource_name || r.singular_name == final_resource_name || r.kind == final_resource_name || format!("{}/{}", r.group, r.kind) == final_resource_name)
-                    .unwrap();   
-                match Otoroshi::get_one_resource(exposed_resource.clone(), id.to_string(), cli_opts.clone()).await {
+                let exposed_resources: OtoroshExposedResources =
+                    Otoroshi::get_exposed_resources(cli_opts.clone())
+                        .await
+                        .unwrap();
+                let exposed_resource = exposed_resources
+                    .resources
+                    .into_iter()
+                    .find(|r| {
+                        r.plural_name == final_resource_name
+                            || r.singular_name == final_resource_name
+                            || r.kind == final_resource_name
+                            || format!("{}/{}", r.group, r.kind) == final_resource_name
+                    })
+                    .unwrap();
+                match Otoroshi::get_one_resource(
+                    exposed_resource.clone(),
+                    id.to_string(),
+                    cli_opts.clone(),
+                )
+                .await
+                {
                     None => {
-                        cli_stderr_printline!("error while fetching resource {}/{}", final_resource_name, id);
+                        cli_stderr_printline!(
+                            "error while fetching resource {}/{}",
+                            final_resource_name,
+                            id
+                        );
                         std::process::exit(-1)
-                    },
+                    }
                     Some(res) => {
                         if data.is_empty() {
                             let content: String = match file {
@@ -1064,167 +1694,304 @@ spec:
                                     } else {
                                         match merge {
                                             None => edit::edit("").unwrap_or_default(),
-                                            Some(merge) => merge.to_string()
+                                            Some(merge) => merge.to_string(),
                                         }
                                     }
-                                },
-                                Some(file) => crate::utils::file::FileHelper::get_content_string(file).await
+                                }
+                                Some(file) => {
+                                    crate::utils::file::FileHelper::get_content_string(file).await
+                                }
                             };
                             let is_yaml = !content.trim().starts_with("{");
                             if is_yaml {
-                                let input = serde_yaml::from_str::<serde_json::Value>(&content).unwrap();
+                                let input =
+                                    serde_yaml::from_str::<serde_json::Value>(&content).unwrap();
                                 let mut doc = res.body;
                                 doc.merge(&input);
                                 let edited = serde_json::to_string(&doc).unwrap();
-                                let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), serde_json::to_string(&edited).unwrap(), cli_opts.clone()).await;
+                                let _ = Otoroshi::upsert_one_resource(
+                                    exposed_resource.clone(),
+                                    id.to_string(),
+                                    serde_json::to_string(&edited).unwrap(),
+                                    cli_opts.clone(),
+                                )
+                                .await;
                             } else {
-                                let input = serde_json::from_str::<serde_json::Value>(&content).unwrap();
+                                let input =
+                                    serde_json::from_str::<serde_json::Value>(&content).unwrap();
                                 let mut doc = res.body;
                                 doc.merge(&input);
                                 let edited = serde_json::to_string(&doc).unwrap();
-                                let _ = Otoroshi::upsert_one_resource(exposed_resource.clone(), id.to_string(), edited, cli_opts.clone()).await;
+                                let _ = Otoroshi::upsert_one_resource(
+                                    exposed_resource.clone(),
+                                    id.to_string(),
+                                    edited,
+                                    cli_opts.clone(),
+                                )
+                                .await;
                             }
                         } else {
-                            let serie: String = data.iter()
+                            let serie: String = data
+                                .iter()
                                 .filter(|str| str.contains('='))
                                 .map(|str| {
-                                    let parts: Vec<String> = str.split('=').map(|s| s.to_string()).collect();
+                                    let parts: Vec<String> =
+                                        str.split('=').map(|s| s.to_string()).collect();
                                     let path = parts.first().unwrap();
                                     let mut value = parts.get(1).unwrap().to_string();
                                     if value.starts_with('\'') && value.ends_with('\'') {
-                                        value = value.strip_suffix('\'').unwrap().strip_prefix('\'').unwrap().to_string();
+                                        value = value
+                                            .strip_suffix('\'')
+                                            .unwrap()
+                                            .strip_prefix('\'')
+                                            .unwrap()
+                                            .to_string();
                                     };
                                     if value.starts_with('"') && value.ends_with('"') {
-                                        value = value.strip_suffix('"').unwrap().strip_prefix('"').unwrap().to_string();
+                                        value = value
+                                            .strip_suffix('"')
+                                            .unwrap()
+                                            .strip_prefix('"')
+                                            .unwrap()
+                                            .to_string();
                                     };
-                                    serde_json::to_string(&serde_json::json!({ "path": path, "value": value })).unwrap()
+                                    serde_json::to_string(
+                                        &serde_json::json!({ "path": path, "value": value }),
+                                    )
+                                    .unwrap()
                                 })
                                 .collect::<Vec<String>>()
                                 .join(",");
-                            let _ = Otoroshi::upsert_one_resource_with_content_type(exposed_resource.clone(), id.to_string(), format!("[{}]", serie), "application/json+oto-patch".to_string(), cli_opts.clone()).await;
+                            let _ = Otoroshi::upsert_one_resource_with_content_type(
+                                exposed_resource.clone(),
+                                id.to_string(),
+                                format!("[{}]", serie),
+                                "application/json+oto-patch".to_string(),
+                                cli_opts.clone(),
+                            )
+                            .await;
                         }
                     }
                 }
-            },
-            ResourcesSubCommand::Apply { file, directory, recursive, watch  } => {
-                match file {
-                    None => {
-                        match directory {
-                            None => cli_stdout_printline!("you need to provide a file or directory path"),
-                            Some(directory) => {
-                                let files = Self::find_files(directory, recursive.unwrap_or(false));
-                                Self::sync_files(files, cli_opts.clone()).await;
-                                if watch.unwrap_or(false) {
-                                    Self::run_watch(directory.as_os_str().to_string_lossy().to_string(), true, recursive.unwrap_or(false), cli_opts.clone());
-                                }
-                            }
+            }
+            ResourcesSubCommand::Apply {
+                file,
+                directory,
+                recursive,
+                watch,
+            } => match file {
+                None => match directory {
+                    None => cli_stdout_printline!("you need to provide a file or directory path"),
+                    Some(directory) => {
+                        let files = Self::find_files(directory, recursive.unwrap_or(false));
+                        Self::sync_files(files, cli_opts.clone()).await;
+                        if watch.unwrap_or(false) {
+                            Self::run_watch(
+                                directory.as_os_str().to_string_lossy().to_string(),
+                                true,
+                                recursive.unwrap_or(false),
+                                cli_opts.clone(),
+                            );
                         }
-                    },
-                    Some(file) => {
-                        if file.starts_with("http://") || file.starts_with("https://") {
-                            if file.starts_with("http://") {
-                                Self::sync_url_http(file.to_owned(), cli_opts.clone()).await;
-                            } else if file.starts_with("https://") {
-                                Self::sync_url_https(file.to_owned(), cli_opts.clone()).await;
-                            }
-                        } else {
-                            Self::sync_files(vec![PathBuf::from(file.to_owned())], cli_opts.clone()).await;
-                            if watch.unwrap_or(false) {
-                                Self::run_watch(file.to_string(), false, recursive.unwrap_or(false), cli_opts.clone());
-                            }
+                    }
+                },
+                Some(file) => {
+                    if file.starts_with("http://") || file.starts_with("https://") {
+                        if file.starts_with("http://") {
+                            Self::sync_url_http(file.to_owned(), cli_opts.clone()).await;
+                        } else if file.starts_with("https://") {
+                            Self::sync_url_https(file.to_owned(), cli_opts.clone()).await;
+                        }
+                    } else {
+                        Self::sync_files(vec![PathBuf::from(file.to_owned())], cli_opts.clone())
+                            .await;
+                        if watch.unwrap_or(false) {
+                            Self::run_watch(
+                                file.to_string(),
+                                false,
+                                recursive.unwrap_or(false),
+                                cli_opts.clone(),
+                            );
                         }
                     }
                 }
             },
             ResourcesSubCommand::Import { file, nd_json } => {
-                let cconfig =  crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts).await.to_connection_config();
+                let cconfig = crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts)
+                    .await
+                    .to_connection_config();
                 let content = crate::utils::file::FileHelper::get_content_string(file).await;
-                let content_type = Some(nd_json.filter(|i| *i).map(|_| "application/x-ndjson".to_string()).unwrap_or("application/json".to_string()));
-                let res = Otoroshi::otoroshi_call(Method::POST, "/api/otoroshi.json", None, Some(hyper::Body::from(content)), content_type, cconfig.clone()).await;
+                let content_type = Some(
+                    nd_json
+                        .filter(|i| *i)
+                        .map(|_| "application/x-ndjson".to_string())
+                        .unwrap_or("application/json".to_string()),
+                );
+                let res = Otoroshi::otoroshi_call(
+                    Method::POST,
+                    "/api/otoroshi.json",
+                    None,
+                    Some(hyper::Body::from(content)),
+                    content_type,
+                    cconfig.clone(),
+                )
+                .await;
                 if res.status != 200 {
                     cli_stderr_printline!("import error ! {:?}", res.body_bytes);
                     std::process::exit(-1)
                 }
-            }, 
-            ResourcesSubCommand::Export { file, directory, split_files, kube, nd_json } => {
-                match file {
-                    Some(file) => {
-                        if !file.exists() {
-                            std::fs::File::create(file).unwrap();
-                        } 
-                        let accept = nd_json.filter(|i| *i).map(|_| "application/x-ndjson".to_string());
-                        match Otoroshi::get_export_json(accept, cli_opts.clone()).await {
-                            None => {
-                                cli_stderr_printline!("error while fetching export");
-                                std::process::exit(-1)
-                            },
-                            Some(bytes) => std::fs::write(file, bytes).unwrap(),
-                        }
-                    },
-                    None => match directory {
+            }
+            ResourcesSubCommand::Export {
+                file,
+                directory,
+                split_files,
+                kube,
+                nd_json,
+            } => match file {
+                Some(file) => {
+                    if !file.exists() {
+                        std::fs::File::create(file).unwrap();
+                    }
+                    let accept = nd_json
+                        .filter(|i| *i)
+                        .map(|_| "application/x-ndjson".to_string());
+                    match Otoroshi::get_export_json(accept, cli_opts.clone()).await {
                         None => {
-                            cli_stderr_printline!("you have to specify a file or directory");
+                            cli_stderr_printline!("error while fetching export");
                             std::process::exit(-1)
-                        },
-                        Some(directory) => {
-                            if !directory.exists() {
-                                std::fs::create_dir_all(directory).unwrap();
-                            }
-                            for resource in Otoroshi::get_exposed_resources(cli_opts.clone()).await.unwrap().resources.into_iter() {
-                                let name = resource.plural_name.to_string();
-                                let name2 = resource.plural_name.to_string();
-                                let res = Otoroshi::get_resources(resource.clone(), 1, 99999, Vec::new(), cli_opts.clone()).await.unwrap();
-                                if split_files.unwrap_or(false) {
-                                    if !res.body.is_empty() {
-                                        std::fs::create_dir_all(directory.join(name)).unwrap();
+                        }
+                        Some(bytes) => std::fs::write(file, bytes).unwrap(),
+                    }
+                }
+                None => match directory {
+                    None => {
+                        cli_stderr_printline!("you have to specify a file or directory");
+                        std::process::exit(-1)
+                    }
+                    Some(directory) => {
+                        if !directory.exists() {
+                            std::fs::create_dir_all(directory).unwrap();
+                        }
+                        for resource in Otoroshi::get_exposed_resources(cli_opts.clone())
+                            .await
+                            .unwrap()
+                            .resources
+                            .into_iter()
+                        {
+                            let name = resource.plural_name.to_string();
+                            let name2 = resource.plural_name.to_string();
+                            let res = Otoroshi::get_resources(
+                                resource.clone(),
+                                1,
+                                99999,
+                                Vec::new(),
+                                cli_opts.clone(),
+                            )
+                            .await
+                            .unwrap();
+                            if split_files.unwrap_or(false) {
+                                if !res.body.is_empty() {
+                                    std::fs::create_dir_all(directory.join(name)).unwrap();
+                                }
+                                for entity in res.body {
+                                    let entity_id =
+                                        EntityHelper::extract_json_entity_id(&entity).unwrap();
+                                    let entity_name =
+                                        EntityHelper::extract_json_entity_name(&entity).unwrap();
+                                    if cli_opts.clone().ouput.filter(|v| *v == "yaml").is_some()
+                                        && kube.unwrap_or(true)
+                                    {
+                                        let kube_entity = KubeEntity::new(
+                                            resource.clone().kind,
+                                            entity_name,
+                                            entity,
+                                        );
+                                        std::fs::write(
+                                            directory
+                                                .join(&name2)
+                                                .join(format!("{}.yaml", entity_id)),
+                                            serde_yaml::to_string(&kube_entity).unwrap(),
+                                        )
+                                        .unwrap();
+                                    } else if cli_opts
+                                        .clone()
+                                        .ouput
+                                        .filter(|v| *v == "yaml")
+                                        .is_some()
+                                        && !kube.unwrap_or(true)
+                                    {
+                                        let mut kind: serde_json::Map<String, serde_json::Value> =
+                                            serde_json::Map::new();
+                                        kind.insert(
+                                            "kind".to_string(),
+                                            serde_json::Value::String(format!(
+                                                "{}/{}",
+                                                resource.clone().group,
+                                                resource.clone().kind
+                                            )),
+                                        );
+                                        let mut entity_with_kind = entity.clone();
+                                        entity_with_kind.merge(&serde_json::Value::Object(kind));
+                                        std::fs::write(
+                                            directory
+                                                .join(&name2)
+                                                .join(format!("{}.yaml", entity_id)),
+                                            serde_yaml::to_string(&entity_with_kind).unwrap(),
+                                        )
+                                        .unwrap();
+                                    } else {
+                                        let mut kind: serde_json::Map<String, serde_json::Value> =
+                                            serde_json::Map::new();
+                                        kind.insert(
+                                            "kind".to_string(),
+                                            serde_json::Value::String(format!(
+                                                "{}/{}",
+                                                resource.clone().group,
+                                                resource.clone().kind
+                                            )),
+                                        );
+                                        let mut entity_with_kind = entity.clone();
+                                        entity_with_kind.merge(&serde_json::Value::Object(kind));
+                                        std::fs::write(
+                                            directory
+                                                .join(&name2)
+                                                .join(format!("{}.json", entity_id)),
+                                            serde_json::to_string_pretty(&entity_with_kind)
+                                                .unwrap(),
+                                        )
+                                        .unwrap();
                                     }
-                                    for entity in res.body {
-                                        let entity_id = EntityHelper::extract_json_entity_id(&entity).unwrap();
-                                        let entity_name = EntityHelper::extract_json_entity_name(&entity).unwrap();
-                                        if cli_opts.clone().ouput.filter(|v| *v == "yaml").is_some() && kube.unwrap_or(true) {
-                                            let kube_entity = KubeEntity::new(resource.clone().kind, entity_name, entity);
-                                            std::fs::write(
-                                                directory.join(&name2).join(format!("{}.yaml", entity_id)),
-                                                serde_yaml::to_string(&kube_entity).unwrap()
-                                            ).unwrap();
-                                        } else if cli_opts.clone().ouput.filter(|v| *v == "yaml").is_some() && !kube.unwrap_or(true) {
-                                            let mut kind: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-                                            kind.insert("kind".to_string(), serde_json::Value::String(format!("{}/{}", resource.clone().group,resource.clone().kind)));
-                                            let mut entity_with_kind = entity.clone();
-                                            entity_with_kind.merge(&serde_json::Value::Object(kind));
-                                            std::fs::write(
-                                                directory.join(&name2).join(format!("{}.yaml", entity_id)),
-                                                serde_yaml::to_string(&entity_with_kind).unwrap()
-                                            ).unwrap();
-                                        } else {
-                                            let mut kind: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-                                            kind.insert("kind".to_string(), serde_json::Value::String(format!("{}/{}", resource.clone().group,resource.clone().kind)));
-                                            let mut entity_with_kind = entity.clone();
-                                            entity_with_kind.merge(&serde_json::Value::Object(kind));
-                                            std::fs::write(
-                                                directory.join(&name2).join(format!("{}.json", entity_id)),
-                                                serde_json::to_string_pretty(&entity_with_kind).unwrap()
-                                            ).unwrap();
-                                        }
-                                    }
-                                } else {
-                                    let kinded_docs: Vec<serde_json::Value> = res.body.into_iter().map(|mut i| {
-                                        let mut kind: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-                                        kind.insert("kind".to_string(), serde_json::Value::String(format!("{}/{}", resource.clone().group,resource.clone().kind)));
+                                }
+                            } else {
+                                let kinded_docs: Vec<serde_json::Value> = res
+                                    .body
+                                    .into_iter()
+                                    .map(|mut i| {
+                                        let mut kind: serde_json::Map<String, serde_json::Value> =
+                                            serde_json::Map::new();
+                                        kind.insert(
+                                            "kind".to_string(),
+                                            serde_json::Value::String(format!(
+                                                "{}/{}",
+                                                resource.clone().group,
+                                                resource.clone().kind
+                                            )),
+                                        );
                                         i.merge(&serde_json::Value::Object(kind));
                                         i
-                                    }).collect();
-                                    let doc = serde_json::Value::Array(kinded_docs);
-                                    std::fs::write(
-                                        directory.join(format!("{}.json", name)),
-                                        serde_json::to_string_pretty(&doc).unwrap()
-                                    ).unwrap();
-                                }
+                                    })
+                                    .collect();
+                                let doc = serde_json::Value::Array(kinded_docs);
+                                std::fs::write(
+                                    directory.join(format!("{}.json", name)),
+                                    serde_json::to_string_pretty(&doc).unwrap(),
+                                )
+                                .unwrap();
                             }
                         }
                     }
-                }
-            }
+                },
+            },
         }
     }
 }
