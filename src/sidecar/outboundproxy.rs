@@ -130,10 +130,7 @@ impl OutboundProxyClient {
             let hostname: String = match otoroshi_routing_location_clone.ip_addresses {
                 None => otoroshi_routing_location_clone.hostname.unwrap(),
                 Some(vec) if vec.is_empty() => otoroshi_routing_location_clone.hostname.unwrap(),
-                Some(vec) => vec
-                    .choose(&mut rand::rng())
-                    .unwrap()
-                    .to_string(),
+                Some(vec) => vec.choose(&mut rand::rng()).unwrap().to_string(),
             };
             format!(
                 "{}://{}:{}{}",
