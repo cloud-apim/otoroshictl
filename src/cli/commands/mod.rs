@@ -5,4 +5,5 @@ pub mod health;
 pub mod infos;
 pub mod metrics;
 pub mod resources;
+pub mod toolbox;
 pub mod version;

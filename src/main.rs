@@ -13,7 +13,7 @@ mod utils;
 
 use std::fs;
 
-use cli::cliopts::{CloudApimSubCommand, SidecarSubCommand};
+use cli::cliopts::{CloudApimSubCommand, SidecarSubCommand, ToolboxSubCommand};
 use sidecar::config::OtoroshiSidecarConfig;
 
 use crate::cli::cliopts::{CliOpts, Commands};
@@ -150,6 +150,12 @@ async fn main() {
             // crate::tunnels::tcp::TcpTunnel::start().await;
             error!("not implemented yet !") // TODO: finish implementation !!!
         }
+        Some(Commands::Toolbox { command }) => match command {
+            ToolboxSubCommand::Mtls { mode } => {
+                crate::commands::toolbox::ToolboxCommands::mtls(cli_opts.clone(), mode.clone())
+                    .await;
+            }
+        },
         Some(Commands::CloudApim { command }) => match command {
             CloudApimSubCommand::Login => {
                 crate::commands::cloud_apim::CloudApimCommands::login(cli_opts).await;

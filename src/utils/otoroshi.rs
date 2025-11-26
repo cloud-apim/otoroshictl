@@ -292,6 +292,40 @@ impl Otoroshi {
         }
     }
 
+    pub async fn get_global_config(opts: CliOpts) -> Option<OtoroshiApiSingleResult> {
+        let config = Self::get_connection_config(opts).await;
+        match Self::get_otoroshi_resource("/api/globalconfig", None, config).await {
+            None => None,
+            Some(body_bytes) => match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                Ok(global_config) => Some(OtoroshiApiSingleResult {
+                    id: "singleton".to_string(),
+                    body: global_config,
+                }),
+                Err(e) => {
+                    debug!("parse error: {}", e);
+                    None
+                }
+            },
+        }
+    }
+
+    pub async fn update_global_config(opts: CliOpts, body: String) -> bool {
+        let config = Self::get_connection_config(opts).await;
+        match Self::otoroshi_call(
+            Method::PUT,
+            "/api/globalconfig",
+            None,
+            Some(hyper::Body::from(body)),
+            Some("application/json".to_string()),
+            config,
+        )
+        .await
+        {
+            resp if resp.status == 200 || resp.status == 201 => true,
+            _ => false,
+        }
+    }
+
     pub async fn delete_one_resource(
         entity: OtoroshExposedResource,
         id: String,

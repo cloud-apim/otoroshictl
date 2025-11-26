@@ -449,6 +449,16 @@ pub enum CloudApimSubCommand {
 }
 
 #[derive(Subcommand, Clone, Debug)]
+pub enum ToolboxSubCommand {
+    /// manage client authentication on the TLS termination
+    Mtls {
+        /// the mode to use: None, Want, Need
+        #[arg(short, long, value_name = "MODE")]
+        mode: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug)]
 pub enum Commands {
     /// Manage all the resources (entities) of the current otoroshi cluster
     #[clap(visible_alias = "rs")]
@@ -520,6 +530,12 @@ pub enum Commands {
     Config {
         #[command(subcommand)]
         command: ConfigSubCommand,
+    },
+    /// A toolbox of useful commands to manage your otoroshi cluster
+    #[clap(visible_alias = "tb")]
+    Toolbox {
+        #[command(subcommand)]
+        command: ToolboxSubCommand,
     },
 }
 
