@@ -16,7 +16,9 @@ fn test_challenge_help() {
     let cli = OtoroshiCtl::new();
     cli.run(&["challenge", "--help"])
         .success()
-        .stdout(predicate::str::contains("Secure backend access via Otoroshi Communication Protocol"));
+        .stdout(predicate::str::contains(
+            "Secure backend access via Otoroshi Communication Protocol",
+        ));
 }
 
 #[test]
@@ -58,5 +60,7 @@ fn test_challenge_alias_works() {
     // The "ch" alias should work the same as "challenge"
     cli.run(&["ch", "--help"])
         .success()
-        .stdout(predicate::str::contains("Secure backend access via Otoroshi Communication Protocol"));
+        .stdout(predicate::str::contains(
+            "Secure backend access via Otoroshi Communication Protocol",
+        ));
 }
