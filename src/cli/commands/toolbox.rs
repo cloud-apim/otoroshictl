@@ -28,22 +28,18 @@ impl ToolboxCommands {
                         let doc = serde_json::json!({"mode": mode});
                         match cli_opts.ouput {
                             Some(str) => match str.as_str() {
-                                "json" => {
-                                    cli_stdout_printline!(
-                                        "{}",
-                                        serde_json::to_string(&doc).unwrap()
-                                    )
-                                }
+                                "json" => cli_stdout_printline!(
+                                    "{}",
+                                    serde_json::to_string(&doc).unwrap()
+                                ),
                                 "json_pretty" => cli_stdout_printline!(
                                     "{}",
                                     serde_json::to_string_pretty(&doc).unwrap()
                                 ),
-                                "yaml" => {
-                                    cli_stdout_printline!(
-                                        "{}",
-                                        serde_yaml::to_string(&doc).unwrap()
-                                    )
-                                }
+                                "yaml" => cli_stdout_printline!(
+                                    "{}",
+                                    serde_yaml::to_string(&doc).unwrap()
+                                ),
                                 _ => cli_stdout_printline!("mTLS mode: {}", mode),
                             },
                             _ => cli_stdout_printline!("mTLS mode: {}", mode),
