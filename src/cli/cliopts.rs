@@ -493,6 +493,24 @@ pub enum ToolboxSubCommand {
         #[arg(short, long, value_name = "MODE")]
         mode: Option<String>,
     },
+    /// Add a mailer endpoint with SMTP configuration and API key
+    AddMailer {
+        /// SMTP host (or OTOROSHI_MAILER_HOST env var)
+        #[arg(long, env = "OTOROSHI_MAILER_HOST")]
+        host: Option<String>,
+        /// SMTP port (or OTOROSHI_MAILER_PORT env var, default: 465)
+        #[arg(long, env = "OTOROSHI_MAILER_PORT")]
+        port: Option<u16>,
+        /// SMTP user/email (or OTOROSHI_MAILER_USER env var)
+        #[arg(long, env = "OTOROSHI_MAILER_USER")]
+        user: Option<String>,
+        /// Use SMTPS (default: true)
+        #[arg(long, env = "OTOROSHI_MAILER_SMTPS")]
+        smtps: Option<bool>,
+        /// Use STARTTLS (default: true)
+        #[arg(long, env = "OTOROSHI_MAILER_STARTTLS")]
+        starttls: Option<bool>,
+    },
 }
 
 #[derive(Subcommand, Clone, Debug)]
