@@ -44,6 +44,7 @@ fn test_subcommands_have_help() {
     let subcommands = [
         "config",
         "resources",
+        "challenge",
         "version",
         "health",
         "infos",
