@@ -170,8 +170,8 @@ impl OtoroshiProtocol {
         validation.set_required_spec_claims(&["exp", "iss"]);
         validation.set_issuer(&[OTOROSHI_ISSUER]);
         validation.validate_aud = false;
-        // Be lenient with expiration for clock skew
-        validation.leeway = 60;
+        // Be lenient with expiration for clock skew (matches Otoroshi's acceptLeeway default)
+        validation.leeway = 10;
 
         let token_data = decode::<ChallengeClaims>(
             token,
@@ -604,14 +604,14 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Expiration tests (leeway = 60s)
+    // Expiration tests (leeway = 10s, matches Otoroshi default)
     // -------------------------------------------------------------------------
 
     #[test]
     fn test_verify_challenge_expired_within_leeway() {
         let protocol = OtoroshiProtocol::new(TEST_SECRET, Algorithm::HS512);
 
-        // Create a token that expired 30 seconds ago (within 60s leeway)
+        // Create a token that expired 5 seconds ago (within 10s leeway)
         #[derive(Serialize)]
         struct Challenge {
             state: String,
@@ -625,13 +625,13 @@ mod tests {
             &Challenge {
                 state: "leeway-test".to_string(),
                 iss: OTOROSHI_ISSUER.to_string(),
-                exp: now - 30, // Expired 30s ago
+                exp: now - 5, // Expired 5s ago
             },
             &EncodingKey::from_secret(TEST_SECRET),
         )
         .unwrap();
 
-        // Should succeed due to 60s leeway
+        // Should succeed due to 10s leeway
         let result = protocol.verify_challenge(&token);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "leeway-test");
@@ -641,7 +641,7 @@ mod tests {
     fn test_verify_challenge_expired_beyond_leeway() {
         let protocol = OtoroshiProtocol::new(TEST_SECRET, Algorithm::HS512);
 
-        // Create a token that expired 120 seconds ago (beyond 60s leeway)
+        // Create a token that expired 15 seconds ago (beyond 10s leeway)
         #[derive(Serialize)]
         struct Challenge {
             state: String,
@@ -655,7 +655,7 @@ mod tests {
             &Challenge {
                 state: "expired-test".to_string(),
                 iss: OTOROSHI_ISSUER.to_string(),
-                exp: now - 120, // Expired 120s ago
+                exp: now - 15, // Expired 15s ago
             },
             &EncodingKey::from_secret(TEST_SECRET),
         )
