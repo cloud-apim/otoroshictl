@@ -1,19 +1,16 @@
 use futures_util::Future;
-use hmac::Hmac;
 use http::Response;
 use hyper::client::{HttpConnector, ResponseFuture};
 use hyper::server::conn::AddrIncoming;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Server};
 use hyper_rustls::TlsAcceptor;
-use sha2::{Sha256, Sha384, Sha512};
 
 use super::cache::{OtoroshiChallengePlugin, SidecarCache};
 use super::config::OtoroshiSidecarConfig;
 
-use hmac::digest::KeyInit;
-use jwt::{AlgorithmType, Header, SignWithKey, Token, VerifyWithKey};
-use std::collections::{BTreeMap, HashMap};
+use crate::otoroshi::protocol::OtoroshiProtocol;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -166,6 +163,35 @@ struct Svc {
 }
 
 impl Svc {
+    /// Process Otoroshi protocol challenge using the shared module.
+    fn process_otoroshi_protocol(
+        version: &str,
+        state_value: &str,
+        secret_in: &str,
+        algo_in: &str,
+        secret_out: &str,
+        algo_out: &str,
+    ) -> Option<String> {
+        if version == "V2" {
+            let protocol = OtoroshiProtocol::new_asymmetric(
+                secret_in.as_bytes(),
+                algo_in.parse().unwrap_or_default(),
+                secret_out.as_bytes(),
+                algo_out.parse().unwrap_or_default(),
+            );
+            match protocol.process_v2(state_value) {
+                Ok(response_token) => Some(response_token),
+                Err(e) => {
+                    error!("Otoroshi protocol error: {}", e);
+                    None
+                }
+            }
+        } else {
+            // V1: Simple echo
+            Some(state_value.to_string())
+        }
+    }
+
     fn get_additional_headers(
         &self,
         in_headers: http::HeaderMap,
@@ -196,155 +222,39 @@ impl Svc {
                         .header_out_name
                         .map(|i| i.to_ascii_lowercase())
                         .unwrap_or("otoroshi-state-resp".to_string());
-                    match in_headers.get(header_name_in) {
-                        None => (),
-                        Some(state) => {
-                            if version == "V2" {
-                                let token = state.to_str().unwrap();
-                                let res: Result<BTreeMap<String, String>, jwt::Error> = {
-                                    match algo_in.as_str() {
-                                        "HS256" => {
-                                            let key: Hmac<Sha256> =
-                                                hmac::Hmac::new_from_slice(secret_in.as_bytes())
-                                                    .unwrap();
-                                            token.verify_with_key(&key)
-                                        }
-                                        "HS384" => {
-                                            let key: Hmac<Sha384> =
-                                                hmac::Hmac::new_from_slice(secret_in.as_bytes())
-                                                    .unwrap();
-                                            token.verify_with_key(&key)
-                                        }
-                                        "HS512" => {
-                                            let key: Hmac<Sha512> =
-                                                hmac::Hmac::new_from_slice(secret_in.as_bytes())
-                                                    .unwrap();
-                                            token.verify_with_key(&key)
-                                        }
-                                        _ => {
-                                            let key: Hmac<Sha512> =
-                                                hmac::Hmac::new_from_slice(secret_in.as_bytes())
-                                                    .unwrap();
-                                            token.verify_with_key(&key)
-                                        }
-                                    }
-                                };
-                                match res {
-                                    Err(e) => error!("bad input token: {}", e),
-                                    Ok(claims) => {
-                                        match claims.get("state") {
-                                            None => error!("no state in token"),
-                                            Some(state) => {
-                                                let alg: AlgorithmType = match algo_out.as_str() {
-                                                    "HS256" => AlgorithmType::Hs256,
-                                                    "HS384" => AlgorithmType::Hs384,
-                                                    _ => AlgorithmType::Hs512,
-                                                };
-                                                let header = Header {
-                                                    algorithm: alg,
-                                                    ..Default::default()
-                                                };
-                                                let mut claims: BTreeMap<&str, serde_json::Value> =
-                                                    BTreeMap::new();
-                                                let date: u64 = std::time::SystemTime::now()
-                                                    .duration_since(std::time::UNIX_EPOCH)
-                                                    .unwrap()
-                                                    .as_secs();
-                                                claims.insert(
-                                                    "state-resp",
-                                                    serde_json::Value::String(state.to_string()),
-                                                );
-                                                claims.insert(
-                                                    "exp",
-                                                    serde_json::Value::Number((date + 10).into()),
-                                                );
-                                                claims.insert(
-                                                    "iat",
-                                                    serde_json::Value::Number(date.into()),
-                                                );
-                                                claims.insert(
-                                                    "nbf",
-                                                    serde_json::Value::Number(date.into()),
-                                                );
-                                                let token = match algo_out.as_str() {
-                                                    "HS256" => {
-                                                        let key: Hmac<Sha256> =
-                                                            hmac::Hmac::new_from_slice(
-                                                                secret_out.as_bytes(),
-                                                            )
-                                                            .unwrap();
-                                                        Token::new(header, claims)
-                                                            .sign_with_key(&key)
-                                                            .unwrap()
-                                                    }
-                                                    "HS384" => {
-                                                        let key: Hmac<Sha384> =
-                                                            hmac::Hmac::new_from_slice(
-                                                                secret_out.as_bytes(),
-                                                            )
-                                                            .unwrap();
-                                                        Token::new(header, claims)
-                                                            .sign_with_key(&key)
-                                                            .unwrap()
-                                                    }
-                                                    "HS512" => {
-                                                        let key: Hmac<Sha512> =
-                                                            hmac::Hmac::new_from_slice(
-                                                                secret_out.as_bytes(),
-                                                            )
-                                                            .unwrap();
-                                                        Token::new(header, claims)
-                                                            .sign_with_key(&key)
-                                                            .unwrap()
-                                                    }
-                                                    _ => {
-                                                        let key: Hmac<Sha512> =
-                                                            hmac::Hmac::new_from_slice(
-                                                                secret_out.as_bytes(),
-                                                            )
-                                                            .unwrap();
-                                                        Token::new(header, claims)
-                                                            .sign_with_key(&key)
-                                                            .unwrap()
-                                                    }
-                                                };
-                                                headers.insert(
-                                                    http::HeaderName::from_str(
-                                                        header_name_out.as_str(),
-                                                    )
-                                                    .unwrap(),
-                                                    http::HeaderValue::from_str(token.as_str())
-                                                        .unwrap(),
-                                                );
-                                            }
-                                        };
-                                    }
-                                };
-                            } else {
-                                headers.insert(
-                                    http::HeaderName::from_str(header_name_out.as_str()).unwrap(),
-                                    state.to_owned(),
-                                );
-                            }
-                        }
-                    };
+
+                    if let Some(state) = in_headers.get(&header_name_in)
+                        && let Ok(state_str) = state.to_str()
+                        && let Some(response) = Self::process_otoroshi_protocol(
+                            &version,
+                            state_str,
+                            &secret_in,
+                            &algo_in,
+                            &secret_out,
+                            &algo_out,
+                        )
+                        && let (Ok(name), Ok(value)) = (
+                            http::HeaderName::from_str(&header_name_out),
+                            http::HeaderValue::from_str(&response),
+                        )
+                    {
+                        headers.insert(name, value);
+                    }
                 }
-                Some(route_id) => {
-                    match self.cache.get_route_by_id(route_id.clone()) {
-                        None => error!("rooute with id '{}' does not exists", route_id.clone()),
-                        Some(route) => {
-                            match route.plugins.into_iter().find(|plugin| {
-                                plugin.plugin == "cp:otoroshi.next.plugins.OtoroshiChallenge"
-                            }) {
-                                None => error!(
-                                    "the specified route with id '{}' does not have the OtoroshiChallenge plugin",
-                                    route_id
-                                ),
-                                Some(plugin) => {
-                                    let config = serde_json::from_value::<OtoroshiChallengePlugin>(
-                                        plugin.config,
-                                    )
-                                    .unwrap();
+                Some(route_id) => match self.cache.get_route_by_id(route_id.clone()) {
+                    None => error!("route with id '{}' does not exist", route_id.clone()),
+                    Some(route) => {
+                        match route.plugins.into_iter().find(|plugin| {
+                            plugin.plugin == "cp:otoroshi.next.plugins.OtoroshiChallenge"
+                        }) {
+                            None => error!(
+                                "the specified route with id '{}' does not have the OtoroshiChallenge plugin",
+                                route_id
+                            ),
+                            Some(plugin) => {
+                                if let Ok(config) =
+                                    serde_json::from_value::<OtoroshiChallengePlugin>(plugin.config)
+                                {
                                     let version = config.version;
                                     let secret_in = config.algo_to_backend.secret;
                                     let algo_in = format!("HS{}", config.algo_to_backend.size);
@@ -356,162 +266,29 @@ impl Svc {
                                     let header_name_out = config
                                         .response_header_name
                                         .unwrap_or("otoroshi-state-resp".to_string());
-                                    match in_headers.get(header_name_in) {
-                                        None => (),
-                                        Some(state) => {
-                                            if version == "V2" {
-                                                let token = state.to_str().unwrap();
-                                                let res: Result<
-                                                    BTreeMap<String, String>,
-                                                    jwt::Error,
-                                                > = {
-                                                    match algo_in.as_str() {
-                                                        "HS256" => {
-                                                            let key: Hmac<Sha256> =
-                                                                hmac::Hmac::new_from_slice(
-                                                                    secret_in.as_bytes(),
-                                                                )
-                                                                .unwrap();
-                                                            token.verify_with_key(&key)
-                                                        }
-                                                        "HS384" => {
-                                                            let key: Hmac<Sha384> =
-                                                                hmac::Hmac::new_from_slice(
-                                                                    secret_in.as_bytes(),
-                                                                )
-                                                                .unwrap();
-                                                            token.verify_with_key(&key)
-                                                        }
-                                                        "HS512" => {
-                                                            let key: Hmac<Sha512> =
-                                                                hmac::Hmac::new_from_slice(
-                                                                    secret_in.as_bytes(),
-                                                                )
-                                                                .unwrap();
-                                                            token.verify_with_key(&key)
-                                                        }
-                                                        _ => {
-                                                            let key: Hmac<Sha512> =
-                                                                hmac::Hmac::new_from_slice(
-                                                                    secret_in.as_bytes(),
-                                                                )
-                                                                .unwrap();
-                                                            token.verify_with_key(&key)
-                                                        }
-                                                    }
-                                                };
-                                                match res {
-                                                    Err(e) => error!("bad input token: {}", e),
-                                                    Ok(claims) => {
-                                                        match claims.get("state") {
-                                                            None => error!("no state in token"),
-                                                            Some(state) => {
-                                                                let alg: AlgorithmType =
-                                                                    match algo_out.as_str() {
-                                                                        "HS256" => {
-                                                                            AlgorithmType::Hs256
-                                                                        }
-                                                                        "HS384" => {
-                                                                            AlgorithmType::Hs384
-                                                                        }
-                                                                        _ => AlgorithmType::Hs512,
-                                                                    };
-                                                                let header = Header {
-                                                                    algorithm: alg,
-                                                                    ..Default::default()
-                                                                };
-                                                                let mut claims: BTreeMap<
-                                                                    &str,
-                                                                    serde_json::Value,
-                                                                > = BTreeMap::new();
-                                                                let date: u64 =
-                                                                    std::time::SystemTime::now()
-                                                                        .duration_since(
-                                                                            std::time::UNIX_EPOCH,
-                                                                        )
-                                                                        .unwrap()
-                                                                        .as_secs();
-                                                                claims.insert(
-                                                                    "state-resp",
-                                                                    serde_json::Value::String(
-                                                                        state.to_string(),
-                                                                    ),
-                                                                );
-                                                                claims.insert(
-                                                                    "exp",
-                                                                    serde_json::Value::Number(
-                                                                        (date + 10).into(),
-                                                                    ),
-                                                                );
-                                                                claims.insert(
-                                                                    "iat",
-                                                                    serde_json::Value::Number(
-                                                                        date.into(),
-                                                                    ),
-                                                                );
-                                                                claims.insert(
-                                                                    "nbf",
-                                                                    serde_json::Value::Number(
-                                                                        date.into(),
-                                                                    ),
-                                                                );
-                                                                let token = match algo_out.as_str()
-                                                                {
-                                                                    "HS256" => {
-                                                                        let key: Hmac<Sha256> = hmac::Hmac::new_from_slice(secret_out.as_bytes()).unwrap();
-                                                                        Token::new(header, claims)
-                                                                            .sign_with_key(&key)
-                                                                            .unwrap()
-                                                                    }
-                                                                    "HS384" => {
-                                                                        let key: Hmac<Sha384> = hmac::Hmac::new_from_slice(secret_out.as_bytes()).unwrap();
-                                                                        Token::new(header, claims)
-                                                                            .sign_with_key(&key)
-                                                                            .unwrap()
-                                                                    }
-                                                                    "HS512" => {
-                                                                        let key: Hmac<Sha512> = hmac::Hmac::new_from_slice(secret_out.as_bytes()).unwrap();
-                                                                        Token::new(header, claims)
-                                                                            .sign_with_key(&key)
-                                                                            .unwrap()
-                                                                    }
-                                                                    _ => {
-                                                                        let key: Hmac<Sha512> = hmac::Hmac::new_from_slice(secret_out.as_bytes()).unwrap();
-                                                                        Token::new(header, claims)
-                                                                            .sign_with_key(&key)
-                                                                            .unwrap()
-                                                                    }
-                                                                };
-                                                                headers.insert(
-                                                                    http::HeaderName::from_str(
-                                                                        header_name_out.as_str(),
-                                                                    )
-                                                                    .unwrap(),
-                                                                    http::HeaderValue::from_str(
-                                                                        token.as_str(),
-                                                                    )
-                                                                    .unwrap(),
-                                                                );
-                                                            }
-                                                        };
-                                                    }
-                                                };
-                                            } else {
-                                                headers.insert(
-                                                    http::HeaderName::from_str(
-                                                        header_name_out.as_str(),
-                                                    )
-                                                    .unwrap(),
-                                                    state.to_owned(),
-                                                );
-                                            }
-                                        }
-                                    };
+
+                                    if let Some(state) = in_headers.get(&header_name_in)
+                                        && let Ok(state_str) = state.to_str()
+                                        && let Some(response) = Self::process_otoroshi_protocol(
+                                            &version,
+                                            state_str,
+                                            &secret_in,
+                                            &algo_in,
+                                            &secret_out,
+                                            &algo_out,
+                                        )
+                                        && let (Ok(name), Ok(value)) = (
+                                            http::HeaderName::from_str(&header_name_out),
+                                            http::HeaderValue::from_str(&response),
+                                        )
+                                    {
+                                        headers.insert(name, value);
+                                    }
                                 }
                             }
                         }
                     }
-                }
+                },
             };
         }
         headers

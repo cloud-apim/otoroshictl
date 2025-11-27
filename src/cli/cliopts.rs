@@ -424,6 +424,43 @@ pub enum SidecarSubCommand {
 }
 
 #[derive(Subcommand, Clone, Debug)]
+pub enum ChallengeSubCommand {
+    /// Secure backend access via Otoroshi Communication Protocol (V2 JWT by default)
+    Proxy {
+        /// Port to listen on
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+        /// Backend port to forward requests to
+        #[arg(short, long, default_value = "9000")]
+        backend_port: u16,
+        /// Backend host
+        #[arg(long, default_value = "127.0.0.1")]
+        backend_host: String,
+        /// Otoroshi shared secret for JWT signing (required for V2, ignored for V1)
+        #[arg(short, long, env = "OTOROSHI_SECRET")]
+        secret: Option<String>,
+        /// Interpret the secret as base64-encoded
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        secret_base64: bool,
+        /// Header name for incoming challenge token from Otoroshi
+        #[arg(long, default_value = "Otoroshi-State")]
+        state_header: String,
+        /// Header name for response token sent back to Otoroshi
+        #[arg(long, default_value = "Otoroshi-State-Resp")]
+        state_resp_header: String,
+        /// Request timeout in seconds
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+        /// JWT token TTL in seconds
+        #[arg(long, default_value = "30")]
+        token_ttl: i64,
+        /// Use V1 protocol (simple echo) instead of V2 (JWT challenge)
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        v1: bool,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug)]
 pub enum CloudApimSubCommand {
     /// Login to your cloud-apim account
     Login,
@@ -536,6 +573,12 @@ pub enum Commands {
     Toolbox {
         #[command(subcommand)]
         command: ToolboxSubCommand,
+    },
+    /// Secure backend access via Otoroshi Communication Protocol (V1/V2)
+    #[clap(visible_alias = "ch")]
+    Challenge {
+        #[command(subcommand)]
+        command: ChallengeSubCommand,
     },
 }
 

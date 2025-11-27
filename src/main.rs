@@ -4,7 +4,10 @@
 extern crate log;
 extern crate base64;
 
+pub mod challenge;
 pub mod cli;
+pub mod http_utils;
+pub mod otoroshi;
 pub mod sidecar;
 pub mod tunnels;
 
@@ -13,7 +16,9 @@ mod utils;
 
 use std::fs;
 
-use cli::cliopts::{CloudApimSubCommand, SidecarSubCommand, ToolboxSubCommand};
+use cli::cliopts::{
+    ChallengeSubCommand, CloudApimSubCommand, SidecarSubCommand, ToolboxSubCommand,
+};
 use sidecar::config::OtoroshiSidecarConfig;
 
 use crate::cli::cliopts::{CliOpts, Commands};
@@ -186,6 +191,34 @@ async fn main() {
                 crate::commands::cloud_apim::CloudApimCommands::restart(
                     cli_opts.clone(),
                     name.to_string(),
+                )
+                .await;
+            }
+        },
+        Some(Commands::Challenge { command }) => match command {
+            ChallengeSubCommand::Proxy {
+                port,
+                backend_port,
+                backend_host,
+                secret,
+                secret_base64,
+                state_header,
+                state_resp_header,
+                timeout,
+                token_ttl,
+                v1,
+            } => {
+                crate::challenge::server::run(
+                    *port,
+                    backend_host.clone(),
+                    *backend_port,
+                    secret.clone(),
+                    *secret_base64,
+                    state_header.clone(),
+                    state_resp_header.clone(),
+                    *timeout,
+                    *token_ttl,
+                    *v1,
                 )
                 .await;
             }
