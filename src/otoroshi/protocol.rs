@@ -166,11 +166,12 @@ impl OtoroshiProtocol {
     /// Validates the JWT signature and extracts the state claim.
     pub fn verify_challenge(&self, token: &str) -> Result<String, ProtocolError> {
         let mut validation = Validation::new(self.algo_in.as_jsonwebtoken());
-        // Otoroshi tokens may not have all standard claims, so be lenient
-        validation.set_required_spec_claims::<&str>(&[]);
+        // Require expiration and issuer claims for security
+        validation.set_required_spec_claims(&["exp", "iss"]);
+        validation.set_issuer(&[OTOROSHI_ISSUER]);
         validation.validate_aud = false;
-        // Be lenient with expiration for clock skew
-        validation.leeway = 60;
+        // Be lenient with expiration for clock skew (matches Otoroshi's acceptLeeway default)
+        validation.leeway = 10;
 
         let token_data = decode::<ChallengeClaims>(
             token,
@@ -373,6 +374,7 @@ mod tests {
         #[derive(Serialize)]
         struct Challenge {
             state: String,
+            iss: String,
             iat: i64,
             exp: i64,
         }
@@ -380,6 +382,7 @@ mod tests {
         let now = Utc::now().timestamp();
         let claims = Challenge {
             state: "challenge-state".to_string(),
+            iss: OTOROSHI_ISSUER.to_string(),
             iat: now,
             exp: now + 60,
         };
@@ -403,10 +406,14 @@ mod tests {
         #[derive(Serialize)]
         struct Challenge {
             state: String,
+            iss: String,
+            exp: i64,
         }
 
         let claims = Challenge {
             state: "state".to_string(),
+            iss: OTOROSHI_ISSUER.to_string(),
+            exp: Utc::now().timestamp() + 60,
         };
 
         let token = encode(
@@ -427,6 +434,83 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
+    fn test_verify_challenge_missing_issuer() {
+        let protocol = OtoroshiProtocol::new(TEST_SECRET, Algorithm::HS512);
+
+        // Token without iss claim should be rejected
+        #[derive(Serialize)]
+        struct Challenge {
+            state: String,
+            exp: i64,
+        }
+
+        let token = encode(
+            &Header::new(jsonwebtoken::Algorithm::HS512),
+            &Challenge {
+                state: "test".to_string(),
+                exp: Utc::now().timestamp() + 60,
+            },
+            &EncodingKey::from_secret(TEST_SECRET),
+        )
+        .unwrap();
+
+        let result = protocol.verify_challenge(&token);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_challenge_wrong_issuer() {
+        let protocol = OtoroshiProtocol::new(TEST_SECRET, Algorithm::HS512);
+
+        // Token with wrong iss claim should be rejected
+        #[derive(Serialize)]
+        struct Challenge {
+            state: String,
+            iss: String,
+            exp: i64,
+        }
+
+        let token = encode(
+            &Header::new(jsonwebtoken::Algorithm::HS512),
+            &Challenge {
+                state: "test".to_string(),
+                iss: "NotOtoroshi".to_string(),
+                exp: Utc::now().timestamp() + 60,
+            },
+            &EncodingKey::from_secret(TEST_SECRET),
+        )
+        .unwrap();
+
+        let result = protocol.verify_challenge(&token);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_challenge_missing_expiration() {
+        let protocol = OtoroshiProtocol::new(TEST_SECRET, Algorithm::HS512);
+
+        // Token without exp claim should be rejected
+        #[derive(Serialize)]
+        struct Challenge {
+            state: String,
+            iss: String,
+        }
+
+        let token = encode(
+            &Header::new(jsonwebtoken::Algorithm::HS512),
+            &Challenge {
+                state: "test".to_string(),
+                iss: OTOROSHI_ISSUER.to_string(),
+            },
+            &EncodingKey::from_secret(TEST_SECRET),
+        )
+        .unwrap();
+
+        let result = protocol.verify_challenge(&token);
+        assert!(result.is_err());
+    }
+
     // -------------------------------------------------------------------------
     // Full V2 flow tests
     // -------------------------------------------------------------------------
@@ -439,6 +523,7 @@ mod tests {
         #[derive(Serialize)]
         struct Challenge {
             state: String,
+            iss: String,
             iat: i64,
             exp: i64,
         }
@@ -448,6 +533,7 @@ mod tests {
             &Header::new(jsonwebtoken::Algorithm::HS512),
             &Challenge {
                 state: "roundtrip-state".to_string(),
+                iss: OTOROSHI_ISSUER.to_string(),
                 iat: now,
                 exp: now + 60,
             },
@@ -518,17 +604,18 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Expiration tests (leeway = 60s)
+    // Expiration tests (leeway = 10s, matches Otoroshi default)
     // -------------------------------------------------------------------------
 
     #[test]
     fn test_verify_challenge_expired_within_leeway() {
         let protocol = OtoroshiProtocol::new(TEST_SECRET, Algorithm::HS512);
 
-        // Create a token that expired 30 seconds ago (within 60s leeway)
+        // Create a token that expired 5 seconds ago (within 10s leeway)
         #[derive(Serialize)]
         struct Challenge {
             state: String,
+            iss: String,
             exp: i64,
         }
 
@@ -537,13 +624,14 @@ mod tests {
             &Header::new(jsonwebtoken::Algorithm::HS512),
             &Challenge {
                 state: "leeway-test".to_string(),
-                exp: now - 30, // Expired 30s ago
+                iss: OTOROSHI_ISSUER.to_string(),
+                exp: now - 5, // Expired 5s ago
             },
             &EncodingKey::from_secret(TEST_SECRET),
         )
         .unwrap();
 
-        // Should succeed due to 60s leeway
+        // Should succeed due to 10s leeway
         let result = protocol.verify_challenge(&token);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "leeway-test");
@@ -553,10 +641,11 @@ mod tests {
     fn test_verify_challenge_expired_beyond_leeway() {
         let protocol = OtoroshiProtocol::new(TEST_SECRET, Algorithm::HS512);
 
-        // Create a token that expired 120 seconds ago (beyond 60s leeway)
+        // Create a token that expired 15 seconds ago (beyond 10s leeway)
         #[derive(Serialize)]
         struct Challenge {
             state: String,
+            iss: String,
             exp: i64,
         }
 
@@ -565,7 +654,8 @@ mod tests {
             &Header::new(jsonwebtoken::Algorithm::HS512),
             &Challenge {
                 state: "expired-test".to_string(),
-                exp: now - 120, // Expired 120s ago
+                iss: OTOROSHI_ISSUER.to_string(),
+                exp: now - 15, // Expired 15s ago
             },
             &EncodingKey::from_secret(TEST_SECRET),
         )
