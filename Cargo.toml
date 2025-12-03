@@ -38,9 +38,11 @@ moka = { version = "0.12.11", features = ["sync", "future"] }
 notify = "8.2.0"
 paris = "1.5.15"
 rand = "0.9.2"
+rpassword = "7.4.0"
 run_script = "0.11.2"
 rustls = "0.21.8"
 rustls-pemfile = "1.0.3"
+secrecy = "0.10.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 serde_yaml = "0.9.34"

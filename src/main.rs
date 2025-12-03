@@ -160,6 +160,27 @@ async fn main() {
                 crate::commands::toolbox::ToolboxCommands::mtls(cli_opts.clone(), mode.clone())
                     .await;
             }
+            ToolboxSubCommand::AddMailer {
+                host,
+                port,
+                user,
+                smtps,
+                starttls,
+            } => {
+                if let Err(e) = crate::commands::toolbox::ToolboxCommands::add_mailer(
+                    cli_opts.clone(),
+                    host.clone(),
+                    *port,
+                    user.clone(),
+                    *smtps,
+                    *starttls,
+                )
+                .await
+                {
+                    cli_stderr_printline!("{}", e);
+                    std::process::exit(-1);
+                }
+            }
         },
         Some(Commands::CloudApim { command }) => match command {
             CloudApimSubCommand::Login => {

@@ -754,4 +754,227 @@ impl Otoroshi {
         debug!("route created ! - {}", resp.status);
         domain
     }
+
+    /// Helper to fetch a JSON resource from Otoroshi API
+    async fn get_json_resource(path: &str, opts: CliOpts) -> Option<serde_json::Value> {
+        let config = Self::get_connection_config(opts).await;
+        match Self::get_otoroshi_resource(path, None, config).await {
+            None => None,
+            Some(body_bytes) => match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                Ok(data) => Some(data),
+                Err(e) => {
+                    debug!("parse error: {}", e);
+                    None
+                }
+            },
+        }
+    }
+
+    /// Get route template from /api/routes/_template
+    pub async fn get_route_template(opts: CliOpts) -> Option<serde_json::Value> {
+        Self::get_json_resource("/api/routes/_template", opts).await
+    }
+
+    /// Helper generic private method to send JSON payloads
+    async fn send_payload(
+        method: Method,
+        path: &str,
+        body: serde_json::Value,
+        opts: CliOpts,
+    ) -> Option<serde_json::Value> {
+        let config = Self::get_connection_config(opts).await;
+        let json_str = serde_json::to_string(&body).ok()?;
+
+        let resp = Self::otoroshi_call(
+            method,
+            path,
+            None,
+            Some(hyper::Body::from(json_str)),
+            Some("application/json".to_string()),
+            config,
+        )
+        .await;
+
+        if resp.status >= 200 && resp.status < 300 {
+            match serde_json::from_slice::<serde_json::Value>(&resp.body_bytes) {
+                Ok(data) => Some(data),
+                Err(e) => {
+                    debug!("parse error: {}", e);
+                    None
+                }
+            }
+        } else {
+            debug!("API call failed: {} - {:?}", resp.status, resp.body_bytes);
+            None
+        }
+    }
+
+    /// Create a route via POST /api/routes
+    pub async fn create_route(body: serde_json::Value, opts: CliOpts) -> Option<serde_json::Value> {
+        Self::send_payload(Method::POST, "/api/routes", body, opts).await
+    }
+
+    /// Update a route via PUT /api/routes/{id}
+    pub async fn update_route(
+        id: &str,
+        body: serde_json::Value,
+        opts: CliOpts,
+    ) -> Option<serde_json::Value> {
+        Self::send_payload(Method::PUT, &format!("/api/routes/{}", id), body, opts).await
+    }
+
+    /// Get apikey template from /api/apikeys/_template
+    pub async fn get_apikey_template(opts: CliOpts) -> Option<serde_json::Value> {
+        Self::get_json_resource("/api/apikeys/_template", opts).await
+    }
+
+    /// Create apikey for a route via POST /api/routes/{route_id}/apikeys
+    pub async fn create_apikey_for_route(
+        route_id: &str,
+        apikey: serde_json::Value,
+        opts: CliOpts,
+    ) -> Option<serde_json::Value> {
+        Self::send_payload(
+            Method::POST,
+            &format!("/api/routes/{}/apikeys", route_id),
+            apikey,
+            opts,
+        )
+        .await
+    }
+
+    /// Get bearer token via GET /api/apikeys/{client_id}/bearer
+    pub async fn get_bearer_token(client_id: &str, opts: CliOpts) -> Option<String> {
+        let config = Self::get_connection_config(opts).await;
+        match Self::get_otoroshi_resource(
+            &format!("/api/apikeys/{}/bearer", client_id),
+            None,
+            config,
+        )
+        .await
+        {
+            None => None,
+            Some(body_bytes) => match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                Ok(json) => json
+                    .get("bearer")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                Err(e) => {
+                    debug!("parse error: {}", e);
+                    None
+                }
+            },
+        }
+    }
+
+    /// Check if a plugin is available in Otoroshi
+    pub async fn is_plugin_available(plugin_id: &str, opts: CliOpts) -> bool {
+        match Self::get_json_resource("/api/plugins/all", opts).await {
+            Some(plugins) => Self::plugin_exists_in_list(&plugins, plugin_id),
+            None => false,
+        }
+    }
+
+    /// Helper function to check if a plugin ID exists in a plugins JSON array
+    /// This is separated for testability
+    pub fn plugin_exists_in_list(plugins: &serde_json::Value, plugin_id: &str) -> bool {
+        plugins
+            .as_array()
+            .map(|arr| {
+                arr.iter().any(|p| {
+                    p.get("id")
+                        .and_then(|id| id.as_str())
+                        .map(|id| id == plugin_id)
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
+    }
+}
+
+// =============================================================================
+// Unit tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -------------------------------------------------------------------------
+    // Tests for plugin_exists_in_list
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_plugin_exists_in_list_finds_plugin() {
+        let plugins = serde_json::json!([
+            {"id": "cp:otoroshi.plugins.foo.Foo", "name": "Foo"},
+            {"id": "cp:otoroshi_plugins.com.cloud.apim.otoroshi.plugins.mailer.MailerEndpoint", "name": "Mailer"},
+            {"id": "cp:otoroshi.next.plugins.ApikeyCalls", "name": "Apikeys"}
+        ]);
+        assert!(Otoroshi::plugin_exists_in_list(
+            &plugins,
+            "cp:otoroshi_plugins.com.cloud.apim.otoroshi.plugins.mailer.MailerEndpoint"
+        ));
+    }
+
+    #[test]
+    fn test_plugin_exists_in_list_not_found() {
+        let plugins = serde_json::json!([
+            {"id": "cp:otoroshi.plugins.foo.Foo", "name": "Foo"},
+            {"id": "cp:otoroshi.next.plugins.ApikeyCalls", "name": "Apikeys"}
+        ]);
+        assert!(!Otoroshi::plugin_exists_in_list(
+            &plugins,
+            "cp:otoroshi_plugins.com.cloud.apim.otoroshi.plugins.mailer.MailerEndpoint"
+        ));
+    }
+
+    #[test]
+    fn test_plugin_exists_in_list_empty_array() {
+        let plugins = serde_json::json!([]);
+        assert!(!Otoroshi::plugin_exists_in_list(
+            &plugins,
+            "cp:otoroshi.plugins.foo.Foo"
+        ));
+    }
+
+    #[test]
+    fn test_plugin_exists_in_list_not_array() {
+        let plugins = serde_json::json!({"error": "not an array"});
+        assert!(!Otoroshi::plugin_exists_in_list(
+            &plugins,
+            "cp:otoroshi.plugins.foo.Foo"
+        ));
+    }
+
+    #[test]
+    fn test_plugin_exists_in_list_plugin_without_id() {
+        let plugins = serde_json::json!([
+            {"name": "Foo"},  // No id field
+            {"id": "cp:otoroshi.plugins.bar.Bar", "name": "Bar"}
+        ]);
+        assert!(!Otoroshi::plugin_exists_in_list(
+            &plugins,
+            "cp:otoroshi.plugins.foo.Foo"
+        ));
+        assert!(Otoroshi::plugin_exists_in_list(
+            &plugins,
+            "cp:otoroshi.plugins.bar.Bar"
+        ));
+    }
+
+    #[test]
+    fn test_plugin_exists_in_list_partial_match_not_accepted() {
+        let plugins = serde_json::json!([
+            {"id": "cp:otoroshi.plugins.mailer.MailerEndpoint", "name": "Mailer"}
+        ]);
+        // Should not match partial ID
+        assert!(!Otoroshi::plugin_exists_in_list(&plugins, "MailerEndpoint"));
+        assert!(!Otoroshi::plugin_exists_in_list(&plugins, "mailer"));
+        // Should match exact ID
+        assert!(Otoroshi::plugin_exists_in_list(
+            &plugins,
+            "cp:otoroshi.plugins.mailer.MailerEndpoint"
+        ));
+    }
 }
