@@ -181,6 +181,14 @@ async fn main() {
                     std::process::exit(-1);
                 }
             }
+            ToolboxSubCommand::Open => {
+                if let Err(e) =
+                    crate::commands::toolbox::ToolboxCommands::open(cli_opts.clone()).await
+                {
+                    cli_stderr_printline!("{}", e);
+                    std::process::exit(-1);
+                }
+            }
         },
         Some(Commands::CloudApim { command }) => match command {
             CloudApimSubCommand::Login => {

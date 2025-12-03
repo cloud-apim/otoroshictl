@@ -511,6 +511,8 @@ pub enum ToolboxSubCommand {
         #[arg(long, env = "OTOROSHI_MAILER_STARTTLS")]
         starttls: Option<bool>,
     },
+    /// Open the Otoroshi backoffice in the default browser
+    Open,
 }
 
 #[derive(Subcommand, Clone, Debug)]
