@@ -331,6 +331,23 @@ impl ToolboxCommands {
         );
     }
 
+    /// Open the Otoroshi backoffice in the default browser
+    pub async fn open(cli_opts: CliOpts) -> Result<(), String> {
+        let infos = Otoroshi::get_infos(cli_opts)
+            .await
+            .ok_or("Failed to fetch cluster info")?;
+
+        let url = infos.backoffice_url.ok_or_else(|| {
+            format!(
+                "No backoffice URL found, this feature requires Otoroshi 17.9 or later (detected Otoroshi {})",
+                infos.otoroshi_version
+            )
+        })?;
+
+        cli_stdout_printline!("Opening {} in browser...", url);
+        crate::utils::browser::open_url(&url)
+    }
+
     pub async fn mtls(cli_opts: CliOpts, mode: Option<String>) {
         match mode {
             None => {

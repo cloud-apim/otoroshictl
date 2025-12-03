@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod entity;
 pub mod file;
 pub mod http;

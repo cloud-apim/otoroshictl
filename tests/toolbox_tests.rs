@@ -8,7 +8,7 @@ use predicates::prelude::*;
 // =============================================================================
 
 // -----------------------------------------------------------------------------
-// CLI structure tests (sans Otoroshi)
+// CLI structure tests (without Otoroshi)
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -17,7 +17,8 @@ fn test_toolbox_help() {
     cli.run(&["toolbox", "--help"])
         .success()
         .stdout(predicate::str::contains("add-mailer"))
-        .stdout(predicate::str::contains("mtls"));
+        .stdout(predicate::str::contains("mtls"))
+        .stdout(predicate::str::contains("open"));
 }
 
 #[test]
@@ -61,7 +62,7 @@ fn test_toolbox_add_mailer_default_port_documented() {
 }
 
 // -----------------------------------------------------------------------------
-// Tests avec Otoroshi (marked #[ignore])
+// Integration tests with Otoroshi (marked #[ignore])
 // Run with: cargo test --test toolbox_tests -- --ignored
 // -----------------------------------------------------------------------------
 
@@ -130,4 +131,35 @@ fn test_add_mailer_with_flags() {
     ])
     .success()
     .stdout(predicate::str::contains("Mailer created successfully"));
+}
+
+// =============================================================================
+// Toolbox open tests
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// CLI structure tests (without Otoroshi)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_toolbox_open_help() {
+    let cli = OtoroshiCtl::new();
+    cli.run(&["toolbox", "open", "--help"])
+        .success()
+        .stdout(predicate::str::contains("backoffice"));
+}
+
+// -----------------------------------------------------------------------------
+// Integration tests with Otoroshi (marked #[ignore])
+// Run with: cargo test --test toolbox_tests -- --ignored
+// -----------------------------------------------------------------------------
+
+#[test]
+#[ignore]
+fn test_toolbox_open_requires_backoffice_url() {
+    // Test case: Otoroshi < 17.9 without backoffice_url
+    let cli = OtoroshiCtl::new();
+    cli.run(&["toolbox", "open"])
+        .failure()
+        .stderr(predicate::str::contains("Otoroshi 17.9"));
 }

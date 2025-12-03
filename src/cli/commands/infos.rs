@@ -26,6 +26,8 @@ pub struct OtoroshiInfos {
     pub os: OsVersion,
     pub datastore: String,
     pub env: String,
+    #[serde(default)]
+    pub backoffice_url: Option<String>,
 }
 
 pub struct InfosCommand {}

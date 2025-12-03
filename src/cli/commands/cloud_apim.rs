@@ -454,7 +454,9 @@ impl CloudApimCommands {
                     "Opening {} in a browser to login and link otoroshictl to your account",
                     console_url
                 );
-                webbrowser::open(console_url.as_str()).unwrap();
+                if let Err(e) = crate::utils::browser::open_url(&console_url) {
+                    cli_stderr_printline!("Warning: {}", e);
+                }
             }
             if count > 1 {
                 cli_stdout_printline!("Retrying to link account ...")
