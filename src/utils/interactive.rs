@@ -86,10 +86,10 @@ pub fn resolve_param(value: Option<String>, env_var: &str, prompt: &str) -> Resu
     if let Some(v) = value {
         return Ok(v);
     }
-    if let Ok(v) = env::var(env_var) {
-        if !v.is_empty() {
-            return Ok(v);
-        }
+    if let Ok(v) = env::var(env_var)
+        && !v.is_empty()
+    {
+        return Ok(v);
     }
     prompt_for_value(prompt)
 }
@@ -104,15 +104,15 @@ pub fn resolve_port(
     if let Some(v) = value {
         return Ok(v);
     }
-    if let Ok(v) = env::var(env_var) {
-        if !v.is_empty() {
-            return v.parse::<u16>().map_err(|_| {
-                format!(
-                    "Invalid port value '{}' in environment variable {}",
-                    v, env_var
-                )
-            });
-        }
+    if let Ok(v) = env::var(env_var)
+        && !v.is_empty()
+    {
+        return v.parse::<u16>().map_err(|_| {
+            format!(
+                "Invalid port value '{}' in environment variable {}",
+                v, env_var
+            )
+        });
     }
     let input = prompt_for_value_with_default(prompt, &default.to_string())?;
     input
@@ -139,10 +139,10 @@ pub fn resolve_bool(
 /// Resolve password from env var or prompt (masked input)
 /// Returns a SecretString to protect the password in memory
 pub fn resolve_password(env_var: &str, prompt: &str) -> Result<SecretString, String> {
-    if let Ok(v) = env::var(env_var) {
-        if !v.is_empty() {
-            return Ok(SecretString::from(v));
-        }
+    if let Ok(v) = env::var(env_var)
+        && !v.is_empty()
+    {
+        return Ok(SecretString::from(v));
     }
     if !is_interactive() {
         return Err(format!(
