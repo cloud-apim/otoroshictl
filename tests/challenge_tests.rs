@@ -42,7 +42,7 @@ fn test_challenge_proxy_help() {
         .stdout(predicate::str::contains("[default: 8080]"))
         .stdout(predicate::str::contains("[default: 9000]"))
         // Environment variables
-        .stdout(predicate::str::contains("OTOROSHI_SECRET"))
+        .stdout(predicate::str::contains("OTOROSHI_CHALLENGE_SECRET"))
         // Protocol description
         .stdout(predicate::str::contains("V1 protocol"));
 }
