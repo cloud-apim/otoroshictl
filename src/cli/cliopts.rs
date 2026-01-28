@@ -437,7 +437,7 @@ pub enum ChallengeSubCommand {
         #[arg(long, default_value = "127.0.0.1")]
         backend_host: String,
         /// Otoroshi shared secret for JWT signing (required for V2, ignored for V1)
-        #[arg(short, long, env = "OTOROSHI_SECRET")]
+        #[arg(short, long, env = "OTOROSHI_CHALLENGE_SECRET")]
         secret: Option<String>,
         /// Interpret the secret as base64-encoded
         #[arg(long, action = clap::ArgAction::SetTrue)]
