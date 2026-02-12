@@ -760,11 +760,11 @@ rules:
       - configmaps
     verbs:
       - update
-      - update
       - create
       - delete
   - apiGroups:
       - extensions
+      - networking.k8s.io
     resources:
       - ingresses
       - ingressclasses
@@ -774,10 +774,19 @@ rules:
       - watch
   - apiGroups:
       - extensions
+      - networking.k8s.io
     resources:
       - ingresses/status
     verbs:
       - update
+  - apiGroups: 
+      - discovery.k8s.io
+    resources: 
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
   - apiGroups:
       - admissionregistration.k8s.io
     resources:
@@ -785,6 +794,30 @@ rules:
       - mutatingwebhookconfigurations
     verbs:
       - get
+      - update
+      - patch
+  - apiGroups: 
+      - gateway.networking.k8s.io
+    resources: 
+      - gatewayclasses
+      - gateways
+      - httproutes
+      - grpcroutes
+      - referencegrants
+      - backendtlspolicies
+    verbs: 
+      - get
+      - list
+      - watch
+  - apiGroups: 
+      - gateway.networking.k8s.io
+    resources: 
+      - gatewayclasses/status
+      - gateways/status
+      - httproutes/status
+      - grpcroutes/status
+    verbs: 
+      - get 
       - update
       - patch
   - apiGroups:
@@ -826,7 +859,27 @@ rules:
                     Otoroshi::get_exposed_resources(cli_opts.clone())
                         .await
                         .unwrap();
-                let output: String = "---\n".to_owned()
+                let output: String = format!("---
+apiVersion: \"apiextensions.k8s.io/v1\"
+kind: \"CustomResourceDefinition\"
+metadata:
+  name: \"plugins.proxy.otoroshi.io\"
+spec:
+  group: \"proxy.otoroshi.io\"
+  names:
+    kind: \"Plugin\"
+    plural: \"plugins\"
+    singular: \"plugin\"
+  scope: \"Namespaced\"
+  versions:
+  - name: \"v1\"
+    served: true
+    storage: true
+    deprecated: false
+    schema:
+      openAPIV3Schema:
+        x-kubernetes-preserve-unknown-fields: true
+        type: \"object\"\n---\n").to_owned()
                     + &exposed_resources
                         .resources
                         .into_iter()
