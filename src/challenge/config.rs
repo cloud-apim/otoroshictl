@@ -81,8 +81,8 @@ fn extract_rsa_public_key(private_pem: &[u8]) -> Result<Vec<u8>, ConfigError> {
     use rsa::pkcs8::DecodePrivateKey;
     use rsa::pkcs8::EncodePublicKey;
 
-    let pem_str =
-        std::str::from_utf8(private_pem).map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
+    let pem_str = std::str::from_utf8(private_pem)
+        .map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
     let private_key = rsa::RsaPrivateKey::from_pkcs8_pem(pem_str)
         .map_err(|e| ConfigError::PublicKeyExtraction(format!("RSA private key: {}", e)))?;
     let public_key = private_key.to_public_key();
@@ -97,8 +97,8 @@ fn extract_ec_p256_public_key(private_pem: &[u8]) -> Result<Vec<u8>, ConfigError
     use p256::pkcs8::DecodePrivateKey;
     use p256::pkcs8::EncodePublicKey;
 
-    let pem_str =
-        std::str::from_utf8(private_pem).map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
+    let pem_str = std::str::from_utf8(private_pem)
+        .map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
     let secret_key = p256::SecretKey::from_pkcs8_pem(pem_str)
         .map_err(|e| ConfigError::PublicKeyExtraction(format!("EC P-256 private key: {}", e)))?;
     let public_key = secret_key.public_key();
@@ -113,8 +113,8 @@ fn extract_ec_p384_public_key(private_pem: &[u8]) -> Result<Vec<u8>, ConfigError
     use p384::pkcs8::DecodePrivateKey;
     use p384::pkcs8::EncodePublicKey;
 
-    let pem_str =
-        std::str::from_utf8(private_pem).map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
+    let pem_str = std::str::from_utf8(private_pem)
+        .map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
     let secret_key = p384::SecretKey::from_pkcs8_pem(pem_str)
         .map_err(|e| ConfigError::PublicKeyExtraction(format!("EC P-384 private key: {}", e)))?;
     let public_key = secret_key.public_key();
@@ -206,7 +206,7 @@ impl ProxyConfig {
                 None => {
                     return Err(ConfigError::PublicKeyExtraction(
                         "private key (--secret) is required for asymmetric algorithms".to_string(),
-                    ))
+                    ));
                 }
             };
             // Public key: provided or extracted from private key

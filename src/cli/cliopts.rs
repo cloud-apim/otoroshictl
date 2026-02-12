@@ -428,13 +428,27 @@ pub enum ChallengeSubCommand {
     /// Secure backend access via Otoroshi Communication Protocol (V2 JWT by default)
     Proxy {
         /// Port to listen on
-        #[arg(short, long, default_value = "8080", env = "OTOROSHI_CHALLENGE_FRONTEND_PORT")]
+        #[arg(
+            short,
+            long,
+            default_value = "8080",
+            env = "OTOROSHI_CHALLENGE_FRONTEND_PORT"
+        )]
         port: u16,
         /// Backend port to forward requests to
-        #[arg(short, long, default_value = "9000", env = "OTOROSHI_CHALLENGE_BACKEND_PORT")]
+        #[arg(
+            short,
+            long,
+            default_value = "9000",
+            env = "OTOROSHI_CHALLENGE_BACKEND_PORT"
+        )]
         backend_port: u16,
         /// Backend host
-        #[arg(long, default_value = "127.0.0.1", env = "OTOROSHI_CHALLENGE_BACKEND_HOST")]
+        #[arg(
+            long,
+            default_value = "127.0.0.1",
+            env = "OTOROSHI_CHALLENGE_BACKEND_HOST"
+        )]
         backend_host: String,
         /// Otoroshi shared secret for JWT signing (required for V2). Can contains the PEM of the
         /// private key in case of asymmetric algorithm usage. In that case, can be the path of a
@@ -445,10 +459,18 @@ pub enum ChallengeSubCommand {
         #[arg(long, action = clap::ArgAction::SetTrue, env = "OTOROSHI_CHALLENGE_SECRET_BASE64")]
         secret_base64: bool,
         /// Header name for incoming challenge token from Otoroshi
-        #[arg(long, default_value = "Otoroshi-State", env = "OTOROSHI_CHALLENGE_REQ_HEADER_NAME")]
+        #[arg(
+            long,
+            default_value = "Otoroshi-State",
+            env = "OTOROSHI_CHALLENGE_REQ_HEADER_NAME"
+        )]
         state_header: String,
         /// Header name for response token sent back to Otoroshi
-        #[arg(long, default_value = "Otoroshi-State-Resp", env = "OTOROSHI_CHALLENGE_RESP_HEADER_NAME")]
+        #[arg(
+            long,
+            default_value = "Otoroshi-State-Resp",
+            env = "OTOROSHI_CHALLENGE_RESP_HEADER_NAME"
+        )]
         state_resp_header: String,
         /// Request timeout in seconds
         #[arg(long, default_value = "30", env = "OTOROSHI_CHALLENGE_TIMEOUT")]
@@ -459,7 +481,7 @@ pub enum ChallengeSubCommand {
         /// Algorithm for JWT signing (HS256, HS384, HS512, RS256, RS384, RS512, ES256, ES384)
         #[arg(long, default_value = "HS512", env = "OTOROSHI_CHALLENGE_ALG")]
         alg: String,
-        /// Public key PEM file for asymmetric algorithms (optional, extracted from private key 
+        /// Public key PEM file for asymmetric algorithms (optional, extracted from private key
         /// if omitted). Can be a file path or just the plain PEM value.
         #[arg(long, env = "OTOROSHI_CHALLENGE_PUBLIC_KEY")]
         public_key: Option<String>,

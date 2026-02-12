@@ -859,7 +859,8 @@ rules:
                     Otoroshi::get_exposed_resources(cli_opts.clone())
                         .await
                         .unwrap();
-                let output: String = format!("---
+                let output: String = format!(
+                    "---
 apiVersion: \"apiextensions.k8s.io/v1\"
 kind: \"CustomResourceDefinition\"
 metadata:
@@ -879,7 +880,9 @@ spec:
     schema:
       openAPIV3Schema:
         x-kubernetes-preserve-unknown-fields: true
-        type: \"object\"\n---\n").to_owned()
+        type: \"object\"\n---\n"
+                )
+                .to_owned()
                     + &exposed_resources
                         .resources
                         .into_iter()
