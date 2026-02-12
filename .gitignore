@@ -3,3 +3,5 @@ target
 /export-test
 /export.json
 /demo.cast
+/crds.yaml
+/rbac.yaml
