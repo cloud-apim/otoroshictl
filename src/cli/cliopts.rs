@@ -428,13 +428,13 @@ pub enum ChallengeSubCommand {
     /// Secure backend access via Otoroshi Communication Protocol (V2 JWT by default)
     Proxy {
         /// Port to listen on
-        #[arg(short, long, default_value = "8080")]
+        #[arg(short, long, default_value = "8080", env = "OTOROSHI_CHALLENGE_FRONTEND_PORT")]
         port: u16,
         /// Backend port to forward requests to
-        #[arg(short, long, default_value = "9000")]
+        #[arg(short, long, default_value = "9000", env = "OTOROSHI_CHALLENGE_BACKEND_PORT")]
         backend_port: u16,
         /// Backend host
-        #[arg(long, default_value = "127.0.0.1")]
+        #[arg(long, default_value = "127.0.0.1", env = "OTOROSHI_CHALLENGE_BACKEND_HOST")]
         backend_host: String,
         /// Otoroshi shared secret for JWT signing (required for V2). Can contains the PEM of the
         /// private key in case of asymmetric algorithm usage. In that case, can be the path of a
@@ -442,19 +442,19 @@ pub enum ChallengeSubCommand {
         #[arg(short, long, env = "OTOROSHI_CHALLENGE_SECRET")]
         secret: Option<String>,
         /// Interpret the secret as base64-encoded
-        #[arg(long, action = clap::ArgAction::SetTrue)]
+        #[arg(long, action = clap::ArgAction::SetTrue, env = "OTOROSHI_CHALLENGE_SECRET_BASE64")]
         secret_base64: bool,
         /// Header name for incoming challenge token from Otoroshi
-        #[arg(long, default_value = "Otoroshi-State")]
+        #[arg(long, default_value = "Otoroshi-State", env = "OTOROSHI_CHALLENGE_REQ_HEADER_NAME")]
         state_header: String,
         /// Header name for response token sent back to Otoroshi
-        #[arg(long, default_value = "Otoroshi-State-Resp")]
+        #[arg(long, default_value = "Otoroshi-State-Resp", env = "OTOROSHI_CHALLENGE_RESP_HEADER_NAME")]
         state_resp_header: String,
         /// Request timeout in seconds
-        #[arg(long, default_value = "30")]
+        #[arg(long, default_value = "30", env = "OTOROSHI_CHALLENGE_TIMEOUT")]
         timeout: u64,
         /// JWT token TTL in seconds
-        #[arg(long, default_value = "30")]
+        #[arg(long, default_value = "30", env = "OTOROSHI_CHALLENGE_TOKEN_TTL")]
         token_ttl: i64,
         /// Algorithm for JWT signing (HS256, HS384, HS512, RS256, RS384, RS512, ES256, ES384)
         #[arg(long, default_value = "HS512", env = "OTOROSHI_CHALLENGE_ALG")]
@@ -464,7 +464,7 @@ pub enum ChallengeSubCommand {
         #[arg(long, env = "OTOROSHI_CHALLENGE_PUBLIC_KEY")]
         public_key: Option<String>,
         /// Use V1 protocol (simple echo) instead of V2 (JWT challenge)
-        #[arg(long, action = clap::ArgAction::SetTrue)]
+        #[arg(long, action = clap::ArgAction::SetTrue, env = "OTOROSHI_CHALLENGE_FORCE_V1")]
         v1: bool,
     },
 }
