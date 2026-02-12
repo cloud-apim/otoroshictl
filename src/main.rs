@@ -235,6 +235,7 @@ async fn main() {
                 state_resp_header,
                 timeout,
                 token_ttl,
+                alg,
                 v1,
             } => {
                 crate::challenge::server::run(
@@ -247,6 +248,7 @@ async fn main() {
                     state_resp_header.clone(),
                     *timeout,
                     *token_ttl,
+                    alg.clone(),
                     *v1,
                 )
                 .await;

@@ -454,6 +454,9 @@ pub enum ChallengeSubCommand {
         /// JWT token TTL in seconds
         #[arg(long, default_value = "30")]
         token_ttl: i64,
+        /// HMAC algorithm for JWT signing (HS256, HS384, HS512)
+        #[arg(long, default_value = "HS512", env = "OTOROSHI_CHALLENGE_ALG")]
+        alg: String,
         /// Use V1 protocol (simple echo) instead of V2 (JWT challenge)
         #[arg(long, action = clap::ArgAction::SetTrue)]
         v1: bool,

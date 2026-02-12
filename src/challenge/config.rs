@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use crate::challenge::error::ConfigError;
+use crate::otoroshi::protocol::Algorithm;
 
 // Re-export shared constants from protocol module
 pub use crate::otoroshi::protocol::{
@@ -53,6 +54,8 @@ pub struct ProxyConfig {
     pub request_timeout: Duration,
     /// JWT token TTL in seconds.
     pub token_ttl: i64,
+    /// HMAC algorithm for JWT signing.
+    pub algorithm: Algorithm,
     /// Protocol version (V1 or V2).
     pub version: ProtocolVersion,
 }
@@ -70,6 +73,7 @@ impl ProxyConfig {
         state_resp_header: String,
         timeout_secs: u64,
         token_ttl: i64,
+        alg: String,
         use_v1: bool,
     ) -> Result<Self, ConfigError> {
         let state_header = HeaderName::from_bytes(state_header.as_bytes()).map_err(|e| {
@@ -122,6 +126,8 @@ impl ProxyConfig {
             None => None,
         };
 
+        let algorithm: Algorithm = alg.parse().unwrap_or_default();
+
         Ok(ProxyConfig {
             listen_addr: SocketAddr::from(([0, 0, 0, 0], port)),
             backend_url: format!("http://{}:{}", backend_host, backend_port),
@@ -130,6 +136,7 @@ impl ProxyConfig {
             state_resp_header,
             request_timeout: Duration::from_secs(timeout_secs),
             token_ttl,
+            algorithm,
             version,
         })
     }
@@ -151,6 +158,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             DEFAULT_REQUEST_TIMEOUT_SECS,
             DEFAULT_TOKEN_TTL_SECS,
+            "HS512".to_string(),
             false,
         );
 
@@ -163,6 +171,7 @@ mod tests {
         assert_eq!(config.state_resp_header.as_str(), "otoroshi-state-resp");
         assert_eq!(config.request_timeout, Duration::from_secs(30));
         assert_eq!(config.token_ttl, 30);
+        assert_eq!(config.algorithm, Algorithm::HS512);
         assert_eq!(config.version, ProtocolVersion::V2);
     }
 
@@ -178,6 +187,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             true,
         );
 
@@ -199,6 +209,7 @@ mod tests {
             "X-Challenge-Resp".to_string(),
             60,
             45,
+            "HS256".to_string(),
             false,
         );
 
@@ -208,6 +219,7 @@ mod tests {
         assert_eq!(config.backend_url, "http://localhost:8000");
         assert_eq!(config.request_timeout, Duration::from_secs(60));
         assert_eq!(config.token_ttl, 45);
+        assert_eq!(config.algorithm, Algorithm::HS256);
     }
 
     #[test]
@@ -223,6 +235,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             false,
         );
 
@@ -243,6 +256,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             false,
         );
 
@@ -261,6 +275,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             false,
         );
 
@@ -283,6 +298,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             0, // TTL = 0
+            "HS512".to_string(),
             false,
         );
 
@@ -305,6 +321,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             -10, // TTL = -10
+            "HS512".to_string(),
             false,
         );
 
@@ -327,6 +344,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             false,
         );
 
@@ -349,6 +367,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             false,
         );
 
@@ -371,6 +390,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             false,
         );
 
@@ -390,6 +410,7 @@ mod tests {
             DEFAULT_STATE_RESP_HEADER.to_string(),
             30,
             30,
+            "HS512".to_string(),
             false,
         );
 

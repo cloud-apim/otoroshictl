@@ -15,7 +15,7 @@ use crate::challenge::config::{ProtocolVersion, ProxyConfig};
 use crate::cli_stderr_printline;
 use crate::cli_stdout_printline;
 use crate::http_utils::is_hop_by_hop_header;
-use crate::otoroshi::protocol::{Algorithm, OtoroshiProtocol};
+use crate::otoroshi::protocol::OtoroshiProtocol;
 
 /// JSON structure for error responses.
 #[derive(Serialize)]
@@ -137,7 +137,7 @@ impl Service<Request<Body>> for ProxySvc {
                         Some(token) => {
                             let protocol = OtoroshiProtocol::new_with_ttl(
                                 secret,
-                                Algorithm::HS512,
+                                config.algorithm,
                                 config.token_ttl,
                             );
                             match protocol.process_v2(&token) {
@@ -260,6 +260,7 @@ pub async fn run(
     state_resp_header: String,
     timeout: u64,
     token_ttl: i64,
+    alg: String,
     use_v1: bool,
 ) {
     // Validate that secret is provided for V2
@@ -280,6 +281,7 @@ pub async fn run(
         state_resp_header,
         timeout,
         token_ttl,
+        alg,
         use_v1,
     ) {
         Ok(config) => Arc::new(config),

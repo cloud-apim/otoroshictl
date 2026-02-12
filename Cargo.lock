@@ -1596,7 +1596,7 @@ checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "otoroshictl"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "assert_cmd",
  "async-recursion",
