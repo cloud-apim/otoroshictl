@@ -1,5 +1,8 @@
 .PHONY: test test-unit test-integration test-all otoroshi-start otoroshi-stop otoroshi-logs check build fmt clean
 
+bdev:
+	cargo build
+
 # Build
 build:
 	cargo build --release
