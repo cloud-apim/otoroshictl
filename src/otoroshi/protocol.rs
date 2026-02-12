@@ -1,7 +1,7 @@
 //! Otoroshi challenge protocol implementation.
 //!
 //! Supports both V1 (simple echo) and V2 (JWT challenge/response) protocols
-//! with configurable HMAC algorithms (HS256, HS384, HS512).
+//! with configurable algorithms (HS256, HS384, HS512, RS256, RS384, RS512, ES256, ES384).
 
 use std::str::FromStr;
 
@@ -22,24 +22,35 @@ pub const OTOROSHI_ISSUER: &str = "Otoroshi";
 /// Default JWT token expiry time in seconds.
 pub const DEFAULT_TOKEN_EXPIRY_SECONDS: i64 = 30;
 
-/// Supported HMAC algorithms for Otoroshi protocol.
+/// Supported algorithms for Otoroshi protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Algorithm {
     HS256,
     HS384,
     #[default]
     HS512,
+    RS256,
+    RS384,
+    RS512,
+    ES256,
+    ES384,
 }
 
 impl FromStr for Algorithm {
     type Err = std::convert::Infallible;
 
-    /// Parse algorithm from string (e.g., "HS256", "HS384", "HS512").
+    /// Parse algorithm from string.
     /// Defaults to HS512 for unknown values.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.to_uppercase().as_str() {
             "HS256" => Algorithm::HS256,
             "HS384" => Algorithm::HS384,
+            "HS512" => Algorithm::HS512,
+            "RS256" => Algorithm::RS256,
+            "RS384" => Algorithm::RS384,
+            "RS512" => Algorithm::RS512,
+            "ES256" => Algorithm::ES256,
+            "ES384" => Algorithm::ES384,
             _ => Algorithm::HS512,
         })
     }
@@ -51,7 +62,24 @@ impl Algorithm {
             Algorithm::HS256 => jsonwebtoken::Algorithm::HS256,
             Algorithm::HS384 => jsonwebtoken::Algorithm::HS384,
             Algorithm::HS512 => jsonwebtoken::Algorithm::HS512,
+            Algorithm::RS256 => jsonwebtoken::Algorithm::RS256,
+            Algorithm::RS384 => jsonwebtoken::Algorithm::RS384,
+            Algorithm::RS512 => jsonwebtoken::Algorithm::RS512,
+            Algorithm::ES256 => jsonwebtoken::Algorithm::ES256,
+            Algorithm::ES384 => jsonwebtoken::Algorithm::ES384,
         }
+    }
+
+    /// Returns true if this algorithm uses asymmetric keys (RSA or EC).
+    pub fn is_asymmetric(self) -> bool {
+        matches!(
+            self,
+            Algorithm::RS256
+                | Algorithm::RS384
+                | Algorithm::RS512
+                | Algorithm::ES256
+                | Algorithm::ES384
+        )
     }
 }
 
@@ -146,6 +174,23 @@ impl OtoroshiProtocol {
         }
     }
 
+    /// Create a new protocol handler with separate secrets/algorithms and configurable TTL.
+    pub fn new_asymmetric_with_ttl(
+        secret_in: &[u8],
+        algo_in: Algorithm,
+        secret_out: &[u8],
+        algo_out: Algorithm,
+        ttl: i64,
+    ) -> Self {
+        Self {
+            algo_in,
+            secret_in: secret_in.to_vec(),
+            algo_out,
+            secret_out: secret_out.to_vec(),
+            ttl,
+        }
+    }
+
     /// Process a V1 challenge (simple echo).
     ///
     /// Returns the same state value that was passed in.
@@ -161,6 +206,36 @@ impl OtoroshiProtocol {
         self.create_response_token(&state)
     }
 
+    /// Build a decoding key appropriate for the incoming algorithm.
+    fn decoding_key(&self) -> Result<DecodingKey, ProtocolError> {
+        match self.algo_in {
+            Algorithm::HS256 | Algorithm::HS384 | Algorithm::HS512 => {
+                Ok(DecodingKey::from_secret(&self.secret_in))
+            }
+            Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512 => {
+                DecodingKey::from_rsa_pem(&self.secret_in).map_err(ProtocolError::from)
+            }
+            Algorithm::ES256 | Algorithm::ES384 => {
+                DecodingKey::from_ec_pem(&self.secret_in).map_err(ProtocolError::from)
+            }
+        }
+    }
+
+    /// Build an encoding key appropriate for the outgoing algorithm.
+    fn encoding_key(&self) -> Result<EncodingKey, ProtocolError> {
+        match self.algo_out {
+            Algorithm::HS256 | Algorithm::HS384 | Algorithm::HS512 => {
+                Ok(EncodingKey::from_secret(&self.secret_out))
+            }
+            Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512 => {
+                EncodingKey::from_rsa_pem(&self.secret_out).map_err(ProtocolError::EncodingFailed)
+            }
+            Algorithm::ES256 | Algorithm::ES384 => {
+                EncodingKey::from_ec_pem(&self.secret_out).map_err(ProtocolError::EncodingFailed)
+            }
+        }
+    }
+
     /// Verify an Otoroshi V2 challenge token.
     ///
     /// Validates the JWT signature and extracts the state claim.
@@ -173,11 +248,8 @@ impl OtoroshiProtocol {
         // Be lenient with expiration for clock skew (matches Otoroshi's acceptLeeway default)
         validation.leeway = 10;
 
-        let token_data = decode::<ChallengeClaims>(
-            token,
-            &DecodingKey::from_secret(&self.secret_in),
-            &validation,
-        )?;
+        let decoding_key = self.decoding_key()?;
+        let token_data = decode::<ChallengeClaims>(token, &decoding_key, &validation)?;
 
         Ok(token_data.claims.state)
     }
@@ -196,10 +268,11 @@ impl OtoroshiProtocol {
             exp: now + self.ttl,
         };
 
+        let encoding_key = self.encoding_key()?;
         encode(
             &Header::new(self.algo_out.as_jsonwebtoken()),
             &claims,
-            &EncodingKey::from_secret(&self.secret_out),
+            &encoding_key,
         )
         .map_err(ProtocolError::EncodingFailed)
     }
@@ -234,6 +307,33 @@ mod tests {
     }
 
     #[test]
+    fn test_algorithm_from_str_rs256() {
+        assert_eq!(Algorithm::from_str("RS256").unwrap(), Algorithm::RS256);
+        assert_eq!(Algorithm::from_str("rs256").unwrap(), Algorithm::RS256);
+    }
+
+    #[test]
+    fn test_algorithm_from_str_rs384() {
+        assert_eq!(Algorithm::from_str("RS384").unwrap(), Algorithm::RS384);
+    }
+
+    #[test]
+    fn test_algorithm_from_str_rs512() {
+        assert_eq!(Algorithm::from_str("RS512").unwrap(), Algorithm::RS512);
+    }
+
+    #[test]
+    fn test_algorithm_from_str_es256() {
+        assert_eq!(Algorithm::from_str("ES256").unwrap(), Algorithm::ES256);
+        assert_eq!(Algorithm::from_str("es256").unwrap(), Algorithm::ES256);
+    }
+
+    #[test]
+    fn test_algorithm_from_str_es384() {
+        assert_eq!(Algorithm::from_str("ES384").unwrap(), Algorithm::ES384);
+    }
+
+    #[test]
     fn test_algorithm_from_str_defaults_to_hs512() {
         assert_eq!(Algorithm::from_str("unknown").unwrap(), Algorithm::HS512);
         assert_eq!(Algorithm::from_str("").unwrap(), Algorithm::HS512);
@@ -242,6 +342,18 @@ mod tests {
     #[test]
     fn test_algorithm_default() {
         assert_eq!(Algorithm::default(), Algorithm::HS512);
+    }
+
+    #[test]
+    fn test_algorithm_is_asymmetric() {
+        assert!(!Algorithm::HS256.is_asymmetric());
+        assert!(!Algorithm::HS384.is_asymmetric());
+        assert!(!Algorithm::HS512.is_asymmetric());
+        assert!(Algorithm::RS256.is_asymmetric());
+        assert!(Algorithm::RS384.is_asymmetric());
+        assert!(Algorithm::RS512.is_asymmetric());
+        assert!(Algorithm::ES256.is_asymmetric());
+        assert!(Algorithm::ES384.is_asymmetric());
     }
 
     // -------------------------------------------------------------------------

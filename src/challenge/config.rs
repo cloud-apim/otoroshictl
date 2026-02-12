@@ -3,6 +3,7 @@
 use base64::Engine;
 use http::header::HeaderName;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::time::Duration;
 
 use crate::challenge::error::ConfigError;
@@ -44,8 +45,10 @@ pub struct ProxyConfig {
     pub listen_addr: SocketAddr,
     /// Full URL to the backend server.
     pub backend_url: String,
-    /// Shared secret for JWT signing/verification as raw bytes (required for V2).
+    /// Secret or private key bytes for JWT signing (required for V2).
     pub secret: Option<Vec<u8>>,
+    /// Public key PEM bytes for JWT verification (only for asymmetric algorithms).
+    pub public_key: Option<Vec<u8>>,
     /// Header name for incoming challenge token.
     pub state_header: HeaderName,
     /// Header name for outgoing response token.
@@ -54,10 +57,83 @@ pub struct ProxyConfig {
     pub request_timeout: Duration,
     /// JWT token TTL in seconds.
     pub token_ttl: i64,
-    /// HMAC algorithm for JWT signing.
+    /// Algorithm for JWT signing.
     pub algorithm: Algorithm,
     /// Protocol version (V1 or V2).
     pub version: ProtocolVersion,
+}
+
+/// Read a PEM value: if it points to an existing file, read the file; otherwise use as-is.
+fn resolve_pem(value: &str) -> Result<Vec<u8>, ConfigError> {
+    let path = Path::new(value);
+    if path.is_file() {
+        std::fs::read(path).map_err(|e| ConfigError::KeyFileError {
+            path: value.to_string(),
+            source: e,
+        })
+    } else {
+        Ok(value.as_bytes().to_vec())
+    }
+}
+
+/// Extract the public key PEM from a private key PEM for RSA algorithms.
+fn extract_rsa_public_key(private_pem: &[u8]) -> Result<Vec<u8>, ConfigError> {
+    use rsa::pkcs8::DecodePrivateKey;
+    use rsa::pkcs8::EncodePublicKey;
+
+    let pem_str =
+        std::str::from_utf8(private_pem).map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
+    let private_key = rsa::RsaPrivateKey::from_pkcs8_pem(pem_str)
+        .map_err(|e| ConfigError::PublicKeyExtraction(format!("RSA private key: {}", e)))?;
+    let public_key = private_key.to_public_key();
+    let public_pem = public_key
+        .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
+        .map_err(|e| ConfigError::PublicKeyExtraction(format!("RSA public key PEM: {}", e)))?;
+    Ok(public_pem.into_bytes())
+}
+
+/// Extract the public key PEM from a private key PEM for ES256 (P-256).
+fn extract_ec_p256_public_key(private_pem: &[u8]) -> Result<Vec<u8>, ConfigError> {
+    use p256::pkcs8::DecodePrivateKey;
+    use p256::pkcs8::EncodePublicKey;
+
+    let pem_str =
+        std::str::from_utf8(private_pem).map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
+    let secret_key = p256::SecretKey::from_pkcs8_pem(pem_str)
+        .map_err(|e| ConfigError::PublicKeyExtraction(format!("EC P-256 private key: {}", e)))?;
+    let public_key = secret_key.public_key();
+    let public_pem = public_key
+        .to_public_key_pem(p256::pkcs8::LineEnding::LF)
+        .map_err(|e| ConfigError::PublicKeyExtraction(format!("EC P-256 public key PEM: {}", e)))?;
+    Ok(public_pem.into_bytes())
+}
+
+/// Extract the public key PEM from a private key PEM for ES384 (P-384).
+fn extract_ec_p384_public_key(private_pem: &[u8]) -> Result<Vec<u8>, ConfigError> {
+    use p384::pkcs8::DecodePrivateKey;
+    use p384::pkcs8::EncodePublicKey;
+
+    let pem_str =
+        std::str::from_utf8(private_pem).map_err(|e| ConfigError::PublicKeyExtraction(e.to_string()))?;
+    let secret_key = p384::SecretKey::from_pkcs8_pem(pem_str)
+        .map_err(|e| ConfigError::PublicKeyExtraction(format!("EC P-384 private key: {}", e)))?;
+    let public_key = secret_key.public_key();
+    let public_pem = public_key
+        .to_public_key_pem(p384::pkcs8::LineEnding::LF)
+        .map_err(|e| ConfigError::PublicKeyExtraction(format!("EC P-384 public key PEM: {}", e)))?;
+    Ok(public_pem.into_bytes())
+}
+
+/// Extract the public key from a private key PEM based on the algorithm.
+fn extract_public_key(algorithm: Algorithm, private_pem: &[u8]) -> Result<Vec<u8>, ConfigError> {
+    match algorithm {
+        Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512 => {
+            extract_rsa_public_key(private_pem)
+        }
+        Algorithm::ES256 => extract_ec_p256_public_key(private_pem),
+        Algorithm::ES384 => extract_ec_p384_public_key(private_pem),
+        _ => unreachable!("extract_public_key called for symmetric algorithm"),
+    }
 }
 
 impl ProxyConfig {
@@ -74,6 +150,7 @@ impl ProxyConfig {
         timeout_secs: u64,
         token_ttl: i64,
         alg: String,
+        public_key: Option<String>,
         use_v1: bool,
     ) -> Result<Self, ConfigError> {
         let state_header = HeaderName::from_bytes(state_header.as_bytes()).map_err(|e| {
@@ -119,19 +196,42 @@ impl ProxyConfig {
             ));
         }
 
-        // Decode secret from base64 if requested, otherwise use as UTF-8 bytes
-        let secret_bytes = match secret {
-            Some(s) if secret_base64 => Some(base64::engine::general_purpose::STANDARD.decode(&s)?),
-            Some(s) => Some(s.into_bytes()),
-            None => None,
-        };
-
         let algorithm: Algorithm = alg.parse().unwrap_or_default();
+
+        // Build secret and public_key bytes based on algorithm type
+        let (secret_bytes, public_key_bytes) = if algorithm.is_asymmetric() {
+            // For asymmetric: secret is PEM private key (file path or inline)
+            let private_pem = match &secret {
+                Some(s) => resolve_pem(s)?,
+                None => {
+                    return Err(ConfigError::PublicKeyExtraction(
+                        "private key (--secret) is required for asymmetric algorithms".to_string(),
+                    ))
+                }
+            };
+            // Public key: provided or extracted from private key
+            let pub_pem = match &public_key {
+                Some(pk) => resolve_pem(pk)?,
+                None => extract_public_key(algorithm, &private_pem)?,
+            };
+            (Some(private_pem), Some(pub_pem))
+        } else {
+            // For HMAC: decode secret from base64 if requested, otherwise use as UTF-8 bytes
+            let secret_bytes = match secret {
+                Some(s) if secret_base64 => {
+                    Some(base64::engine::general_purpose::STANDARD.decode(&s)?)
+                }
+                Some(s) => Some(s.into_bytes()),
+                None => None,
+            };
+            (secret_bytes, None)
+        };
 
         Ok(ProxyConfig {
             listen_addr: SocketAddr::from(([0, 0, 0, 0], port)),
             backend_url: format!("http://{}:{}", backend_host, backend_port),
             secret: secret_bytes,
+            public_key: public_key_bytes,
             state_header,
             state_resp_header,
             request_timeout: Duration::from_secs(timeout_secs),
@@ -159,6 +259,7 @@ mod tests {
             DEFAULT_REQUEST_TIMEOUT_SECS,
             DEFAULT_TOKEN_TTL_SECS,
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -188,6 +289,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             true,
         );
 
@@ -210,6 +312,7 @@ mod tests {
             60,
             45,
             "HS256".to_string(),
+            None,
             false,
         );
 
@@ -236,6 +339,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -257,6 +361,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -276,6 +381,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -299,6 +405,7 @@ mod tests {
             30,
             0, // TTL = 0
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -322,6 +429,7 @@ mod tests {
             30,
             -10, // TTL = -10
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -345,6 +453,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -368,6 +477,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -391,6 +501,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             false,
         );
 
@@ -411,6 +522,7 @@ mod tests {
             30,
             30,
             "HS512".to_string(),
+            None,
             false,
         );
 

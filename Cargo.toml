@@ -33,6 +33,9 @@ hyper = { version = "0.14.32", features = ["full"] }
 hyper-rustls = "0.24.2"
 json_value_merge = "2.0.1"
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+rsa = { version = "0.9", default-features = false, features = ["std", "pem"] }
+p256 = { version = "0.13", default-features = false, features = ["std", "pem", "pkcs8"] }
+p384 = { version = "0.13", default-features = false, features = ["std", "pem", "pkcs8"] }
 log = "0.4.29"
 moka = { version = "0.12.13", features = ["sync", "future"] }
 notify = "8.2.0"

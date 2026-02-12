@@ -436,7 +436,9 @@ pub enum ChallengeSubCommand {
         /// Backend host
         #[arg(long, default_value = "127.0.0.1")]
         backend_host: String,
-        /// Otoroshi shared secret for JWT signing (required for V2, ignored for V1)
+        /// Otoroshi shared secret for JWT signing (required for V2). Can contains the PEM of the
+        /// private key in case of asymmetric algorithm usage. In that case, can be the path of a
+        /// PEM file or the plain PEM value.
         #[arg(short, long, env = "OTOROSHI_CHALLENGE_SECRET")]
         secret: Option<String>,
         /// Interpret the secret as base64-encoded
@@ -454,9 +456,13 @@ pub enum ChallengeSubCommand {
         /// JWT token TTL in seconds
         #[arg(long, default_value = "30")]
         token_ttl: i64,
-        /// HMAC algorithm for JWT signing (HS256, HS384, HS512)
+        /// Algorithm for JWT signing (HS256, HS384, HS512, RS256, RS384, RS512, ES256, ES384)
         #[arg(long, default_value = "HS512", env = "OTOROSHI_CHALLENGE_ALG")]
         alg: String,
+        /// Public key PEM file for asymmetric algorithms (optional, extracted from private key 
+        /// if omitted). Can be a file path or just the plain PEM value.
+        #[arg(long, env = "OTOROSHI_CHALLENGE_PUBLIC_KEY")]
+        public_key: Option<String>,
         /// Use V1 protocol (simple echo) instead of V2 (JWT challenge)
         #[arg(long, action = clap::ArgAction::SetTrue)]
         v1: bool,

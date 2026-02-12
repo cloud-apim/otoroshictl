@@ -30,4 +30,16 @@ pub enum ConfigError {
     /// Port must be non-zero.
     #[error("Port must be greater than 0")]
     InvalidPort,
+
+    /// Failed to read a key file.
+    #[error("Failed to read key file '{path}': {source}")]
+    KeyFileError {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to extract the public key from the private key.
+    #[error("Failed to extract public key: {0}")]
+    PublicKeyExtraction(String),
 }

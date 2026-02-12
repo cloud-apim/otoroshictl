@@ -10,20 +10,26 @@ spec:
   dns_domain: .otoroshi.mesh
   dns_ttl: null
   otoroshi:
-    context_name: null
+    api_context_name: null
     location:
-      hostname: otoroshi-api.otoroshi.mesh
-      ip_addresses:
-      - 127.0.0.1
-      - 127.0.0.1
+      hostname: otoroshi-api.oto.tools
+      ip_addresses: null
       kubernetes:
         service: otoroshi-service
         namespace: otoroshi
-      port: 8443
+      port: 9999
+      tls: false
+    routing_location:
+      hostname: routing.oto.tools
+      ip_addresses: null
+      kubernetes:
+        service: otoroshi-service
+        namespace: otoroshi
+      port: 9998
       tls: true
     credentials:
-      client_id: xxxx
-      client_secret: xxxx
+      client_id: admin-api-apikey-id
+      client_secret: admin-api-apikey-secret
     client_cert:
       cert_location: /tmp/cert.pem
       cert_value: |
@@ -39,55 +45,42 @@ spec:
       ca_value: null
   inbound:
     port: 15000
-    target_port: 8443
+    target_port: 3000
     target_hostname: api-a.foo.bar
+    target_version: null
     tls:
       enabled: true
-      cert_id: xxxx
+      cert_id: Lkw5xxlo4FNBjFjqxU7DMzUKr3frGPqn
     mtls:
       enabled: true
-      ca_cert_id: xxxx
+      ca_cert_id: otoroshi-intermediate-ca
     otoroshi_protocol:
       enabled: true
-      route_id: xxxx
-      secret: xxxxx
-      algo: HS256
       version: V2
+      route_id: xxxx
+      secret_in: null
+      secret_out: null
+      algo_in: null
+      algo_out: null
       header_in_name: xxxx
       header_out_name: xxxx
   outbounds:
-    port: 8080
+    port: 15001
+    sidecar-outbound.otoroshi.mesh:
+      hostname: sidecar-outbound.otoroshi.mesh
+      path: /api/.*
+      apikey:
+        enabled: true
+        apikey_id: apki_dev_ZOHqpXD1hGUoBXXB
+      mtls:
+        enabled: true
+        client_cert_id: otoroshi-client
     service-b.otoroshi.mesh:
       hostname: service-b.otoroshi.mesh
       path: /.*
       apikey:
         enabled: true
-        apikey_id: xxxx
+        apikey_id: apki_dev_ZOHqpXD1hGUoBXXB
       mtls:
         enabled: true
-        client_cert_id: xxxx
-      otoroshi_protocol:
-        enabled: true
-        route_id: xxxx
-        secret: xxxxx
-        algo: HS256
-        version: V2
-        header_in_name: xxxx
-        header_out_name: xxxx
-    service-a.otoroshi.mesh:
-      hostname: service-a.otoroshi.mesh
-      path: /api/.*
-      apikey:
-        enabled: true
-        apikey_id: xxxx
-      mtls:
-        enabled: true
-        client_cert_id: xxxx
-      otoroshi_protocol:
-        enabled: true
-        route_id: xxxx
-        secret: xxxxx
-        algo: HS256
-        version: V2
-        header_in_name: xxxx
-        header_out_name: xxxx
+        client_cert_id: otoroshi-client

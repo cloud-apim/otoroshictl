@@ -135,11 +135,22 @@ impl Service<Request<Body>> for ProxySvc {
 
                     match state_value {
                         Some(token) => {
-                            let protocol = OtoroshiProtocol::new_with_ttl(
-                                secret,
-                                config.algorithm,
-                                config.token_ttl,
-                            );
+                            let protocol = if config.algorithm.is_asymmetric() {
+                                let public_key = config.public_key.as_deref().unwrap_or(secret);
+                                OtoroshiProtocol::new_asymmetric_with_ttl(
+                                    public_key,
+                                    config.algorithm,
+                                    secret,
+                                    config.algorithm,
+                                    config.token_ttl,
+                                )
+                            } else {
+                                OtoroshiProtocol::new_with_ttl(
+                                    secret,
+                                    config.algorithm,
+                                    config.token_ttl,
+                                )
+                            };
                             match protocol.process_v2(&token) {
                                 Ok(resp_token) => Some(resp_token),
                                 Err(e) => {
@@ -261,6 +272,7 @@ pub async fn run(
     timeout: u64,
     token_ttl: i64,
     alg: String,
+    public_key: Option<String>,
     use_v1: bool,
 ) {
     // Validate that secret is provided for V2
@@ -282,6 +294,7 @@ pub async fn run(
         timeout,
         token_ttl,
         alg,
+        public_key,
         use_v1,
     ) {
         Ok(config) => Arc::new(config),
