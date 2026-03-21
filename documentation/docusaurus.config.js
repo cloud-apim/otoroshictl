@@ -76,6 +76,11 @@ const config = {
     ({
       // Replace with your project's social card
       image: 'img/otoroshictl-logo-nav.png',
+      colorMode: {
+        defaultMode: 'light',
+        disableSwitch: false,
+        respectPrefersColorScheme: true,
+      },
       navbar: {
         title: 'otoroshictl',
         logo: {
