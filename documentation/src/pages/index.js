@@ -123,7 +123,7 @@ function HomepageHeader() {
           </div>
           <div className={styles.heroMascotWrapper}>
             <img
-              src={require('@site/static/img/otoroshictl-logo-big.png').default}
+              src={require('@site/static/img/otoroshictl-logo-big-nobg.png').default}
               alt="otoroshictl"
               className={styles.heroMascot}
             />
