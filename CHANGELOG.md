@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- `--exclude-path` option for the challenge proxy to forward health check paths (GET/HEAD) to the backend without challenge verification
+- Native support for Clever Cloud `CC_HEALTH_CHECK_PATH` and `CC_HEALTH_CHECK_PATH_<n>` variables in the challenge proxy
+
+---
+
 ## [0.0.17] - 2026-02-22
 
 ### Added

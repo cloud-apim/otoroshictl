@@ -302,6 +302,7 @@ async fn main() {
                 consumer_info_public_key,
                 consumer_info_permissive,
                 keep_otoroshi_headers,
+                exclude_path,
             } => {
                 crate::challenge::server::run(
                     *port,
@@ -328,6 +329,7 @@ async fn main() {
                     consumer_info_public_key.clone(),
                     !consumer_info_permissive,
                     !keep_otoroshi_headers,
+                    exclude_path.clone(),
                 )
                 .await;
             }

@@ -132,6 +132,56 @@ By default the proxy strips all Otoroshi-specific headers (`Otoroshi-State` and 
 | `Otoroshi-State` | removed | forwarded |
 | `Otoroshi-Claims` (or custom) | removed | forwarded or replaced by JSON if consumer info enabled |
 
+## Health checks and excluded paths
+
+The challenge is enforced on every request, so a probe that hits the proxy directly (Kubernetes liveness/readiness, a load balancer, a PaaS deployment check) gets a `401` because it carries no `Otoroshi-State` token. Use `--exclude-path` to forward such paths to the backend without any challenge verification:
+
+<Terminal
+    command="otoroshictl challenge proxy --secret my-secret --exclude-path /health --exclude-path /ready"
+    result={`
+Otoroshi V2 (JWT) Challenge Proxy listening on http://0.0.0.0:8080
+Forwarding requests to http://127.0.0.1:9000
+Challenge bypassed for GET/HEAD on: /health, /ready
+`} />
+
+The flag is repeatable and also accepts a comma-separated list (`--exclude-path /health,/ready`, or `OTOROSHI_CHALLENGE_EXCLUDE_PATHS=/health,/ready`).
+
+Rules applied to excluded paths:
+
+- the challenge is bypassed only when the request carries **no** `Otoroshi-State` header (or the custom `--state-header`). A request with a state header, even an empty or malformed one, goes through the normal processing: in V2 the JWT is verified and a `401` is returned when invalid, in V1 the value is echoed; the other enabled checks (Consumer Info strict mode) apply too, and the `Otoroshi-State-Resp` header is added to the backend response once everything passed. Otoroshi itself (including its route health checks) can therefore still call these paths
+- only `GET` and `HEAD` requests are bypassed, any other method still requires a valid challenge
+- the match is exact and case-sensitive on the path: `/health` does not match `/healthz`, `/HEALTH` nor `/health/live`; the query string and a trailing `/` are ignored
+- a bypassed request is forwarded to the backend with the usual header filtering (hop-by-hop headers removed, Otoroshi headers stripped unless `--keep-otoroshi-headers`), so the probe really tests your application. No `Otoroshi-State-Resp` header is present in the response, even if the backend sets one
+- Consumer Info processing is skipped on bypassed requests, including the strict `401` on a missing header. When Consumer Info is enabled with an output header different from the input one, a client-supplied header of that output name is never forwarded, on any request. When both names are the same, the usual rules apply: the header is replaced by the decoded JSON when valid, stripped otherwise, or kept as received with `--keep-otoroshi-headers`
+
+:::warning
+Every excluded path is reachable without authentication through the proxy. Keep the list to the exact health check endpoints of your application.
+:::
+
+### Clever Cloud
+
+On [Clever Cloud](https://www.clever.cloud/developers/doc/develop/common-configuration/healthcheck/), health check paths are declared with `CC_HEALTH_CHECK_PATH` (single path) or `CC_HEALTH_CHECK_PATH_0`, `CC_HEALTH_CHECK_PATH_1`, … (several paths). The platform calls them on the application port during deployment and expects a `200`.
+
+The proxy reads these variables natively and cannot be told not to: every path declared there is excluded from the challenge, with the same rules as `--exclude-path`, and merged with the `--exclude-path` values. Indexed variables must start at `0` and be contiguous: the proxy stops at the first missing index, so a `CC_HEALTH_CHECK_PATH_2` without `_1` is ignored. Blank values are skipped. No extra configuration is needed.
+
+<Terminal
+    command="CC_HEALTH_CHECK_PATH=/health otoroshictl challenge proxy --secret my-secret"
+    result={`
+Otoroshi V2 (JWT) Challenge Proxy listening on http://0.0.0.0:8080
+Forwarding requests to http://127.0.0.1:9000
+Challenge bypassed for GET/HEAD on: /health (from Clever Cloud health check variables)
+`} />
+
+The [Otoroshi Challenge](https://www.clever.cloud/developers/doc/develop/request-flow/otoroshi-challenge/) middleware of Clever Cloud [Request Flow](https://www.clever.cloud/developers/doc/develop/request-flow/) runs this very proxy in front of your application. Nothing to ship or start: set the shared secret and the platform detects and starts the middleware on the public port, forwarding to your application on port `9000`.
+
+```bash
+OTOROSHI_CHALLENGE_SECRET="a-secret-shared-with-your-gateway"
+PORT="9000"
+CC_HEALTH_CHECK_PATH="/health"
+```
+
+To configure the middleware chain explicitly, include `otoroshi-challenge` in `CC_REQUEST_FLOW` alongside every other required service. With this version of otoroshictl on the platform, the deployment health check on `/health` goes through the middleware without a challenge, while every other request still needs a valid token from your gateway.
+
 ## Environment variables
 
 All flags can be set via environment variables, which is the recommended approach for production deployments.
@@ -154,6 +204,8 @@ All flags can be set via environment variables, which is the recommended approac
 | `OTOROSHI_CHALLENGE_TIMEOUT` | `--timeout` | `30` |
 | `OTOROSHI_CHALLENGE_FORCE_V1` | `--v1` | `false` |
 | `OTOROSHI_CHALLENGE_KEEP_HEADERS` | `--keep-otoroshi-headers` | `false` |
+| `OTOROSHI_CHALLENGE_EXCLUDE_PATHS` | `--exclude-path` | — |
+| `CC_HEALTH_CHECK_PATH`, `CC_HEALTH_CHECK_PATH_<n>` | *(Clever Cloud, always read)* | — |
 | `OTOROSHI_CONSUMER_INFO_ENABLED` | `--consumer-info` | `false` |
 | `OTOROSHI_CONSUMER_INFO_HEADER` | `--consumer-info-header` | `Otoroshi-Claims` |
 | `OTOROSHI_CONSUMER_INFO_OUT_HEADER` | `--consumer-info-out-header` | *(same as input header)* |
@@ -230,6 +282,11 @@ Options:
       --consumer-info-permissive
           Allow requests through even if the Consumer Info header is absent or invalid
           [env: OTOROSHI_CONSUMER_INFO_PERMISSIVE=]
+      --exclude-path <PATH>
+          Path forwarded to the backend without challenge verification (GET/HEAD only), for
+          health checks. Repeatable or comma-separated. Clever Cloud `CC_HEALTH_CHECK_PATH`
+          and `CC_HEALTH_CHECK_PATH_<n>` variables are always taken into account
+          [env: OTOROSHI_CHALLENGE_EXCLUDE_PATHS=]
   -h, --help
           Print help
 `} />

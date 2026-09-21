@@ -1,6 +1,7 @@
 //! Configuration for the Otoroshi Challenge Proxy.
 
 use base64::Engine;
+use http::Method;
 use http::header::HeaderName;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -28,6 +29,67 @@ pub const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 30;
 
 /// Alias for backward compatibility.
 pub const DEFAULT_TOKEN_TTL_SECS: i64 = DEFAULT_TOKEN_EXPIRY_SECONDS;
+
+/// Clever Cloud environment variable holding a single health check path.
+pub const CC_HEALTH_CHECK_PATH_ENV: &str = "CC_HEALTH_CHECK_PATH";
+
+/// Prefix of the Clever Cloud environment variables holding indexed health check paths
+/// (`CC_HEALTH_CHECK_PATH_0`, `CC_HEALTH_CHECK_PATH_1`, ...).
+pub const CC_HEALTH_CHECK_PATH_INDEXED_ENV_PREFIX: &str = "CC_HEALTH_CHECK_PATH_";
+
+/// Normalize a request path for exclusion matching.
+///
+/// Trims whitespace, drops any query string, ensures a leading `/` and removes a trailing `/`
+/// (except for the root path). Returns `None` for empty values.
+pub fn normalize_path(path: &str) -> Option<String> {
+    let trimmed = path.trim();
+    let without_query = trimmed.split(['?', '#']).next().unwrap_or("");
+    if without_query.is_empty() {
+        return None;
+    }
+    let mut normalized = if without_query.starts_with('/') {
+        without_query.to_string()
+    } else {
+        format!("/{}", without_query)
+    };
+    while normalized.len() > 1 && normalized.ends_with('/') {
+        normalized.pop();
+    }
+    Some(normalized)
+}
+
+/// Read the health check paths declared through Clever Cloud environment variables.
+///
+/// Supports both `CC_HEALTH_CHECK_PATH` (single path) and the indexed form
+/// `CC_HEALTH_CHECK_PATH_0`, `CC_HEALTH_CHECK_PATH_1`, ... (stops at the first gap).
+/// See <https://www.clever.cloud/developers/doc/deploy/applications/dotnet/#enable-health-check-during-deployment>.
+pub fn clever_cloud_health_check_paths() -> Vec<String> {
+    clever_cloud_health_check_paths_from(|name| std::env::var(name).ok())
+}
+
+/// Same as [`clever_cloud_health_check_paths`] but with an injectable environment lookup.
+pub fn clever_cloud_health_check_paths_from<F>(lookup: F) -> Vec<String>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let mut paths = Vec::new();
+    if let Some(value) = lookup(CC_HEALTH_CHECK_PATH_ENV)
+        && !value.trim().is_empty()
+    {
+        paths.push(value);
+    }
+    let mut index = 0usize;
+    while let Some(value) = lookup(&format!(
+        "{}{}",
+        CC_HEALTH_CHECK_PATH_INDEXED_ENV_PREFIX, index
+    )) {
+        if !value.trim().is_empty() {
+            paths.push(value);
+        }
+        index += 1;
+    }
+    paths
+}
 
 /// Protocol version for Otoroshi challenge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,6 +145,10 @@ pub struct ProxyConfig {
     pub consumer_info: Option<ConsumerInfoConfig>,
     /// Strip Otoroshi-specific headers (state challenge + consumer info) before forwarding.
     pub strip_otoroshi_headers: bool,
+    /// Request paths forwarded to the backend without challenge verification when the request
+    /// carries no state header (health checks). Only `GET` and `HEAD` requests are concerned.
+    /// Paths are normalized with [`normalize_path`] and matched exactly.
+    pub excluded_paths: Vec<String>,
 }
 
 /// Read a PEM value: if it points to an existing file, read the file; otherwise use as-is.
@@ -362,7 +428,45 @@ impl ProxyConfig {
             version,
             consumer_info,
             strip_otoroshi_headers,
+            excluded_paths: Vec::new(),
         })
+    }
+
+    /// Set the paths that bypass the challenge verification (health checks).
+    ///
+    /// Values are normalized with [`normalize_path`], deduplicated and empty values dropped.
+    pub fn with_excluded_paths<I, S>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut excluded: Vec<String> = Vec::new();
+        for path in paths {
+            if let Some(normalized) = normalize_path(path.as_ref())
+                && !excluded.contains(&normalized)
+            {
+                excluded.push(normalized);
+            }
+        }
+        self.excluded_paths = excluded;
+        self
+    }
+
+    /// Returns true if the request targets an excluded path (health check).
+    ///
+    /// Only `GET` and `HEAD` requests on an excluded path match. The caller decides whether
+    /// to bypass the challenge (the server only does so when no state header is present).
+    pub fn is_excluded(&self, method: &Method, path: &str) -> bool {
+        if self.excluded_paths.is_empty() {
+            return false;
+        }
+        if method != Method::GET && method != Method::HEAD {
+            return false;
+        }
+        match normalize_path(path) {
+            Some(normalized) => self.excluded_paths.contains(&normalized),
+            None => false,
+        }
     }
 }
 
@@ -834,5 +938,141 @@ mod tests {
 
         assert!(config.is_err());
         assert!(matches!(config.unwrap_err(), ConfigError::InvalidPort));
+    }
+    fn base_config() -> ProxyConfig {
+        ProxyConfig::new(
+            DEFAULT_LISTEN_PORT,
+            DEFAULT_BACKEND_HOST.to_string(),
+            DEFAULT_BACKEND_PORT,
+            Some("test-secret".to_string()),
+            false,
+            DEFAULT_STATE_HEADER.to_string(),
+            DEFAULT_STATE_RESP_HEADER.to_string(),
+            DEFAULT_REQUEST_TIMEOUT_SECS,
+            DEFAULT_TOKEN_TTL_SECS,
+            "HS512".to_string(),
+            None,
+            None,
+            false,
+            None,
+            false,
+            false,
+            "Otoroshi-Claims".to_string(),
+            None,
+            "HS512".to_string(),
+            None,
+            false,
+            None,
+            false,
+            true,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        assert_eq!(normalize_path("/health"), Some("/health".to_string()));
+        assert_eq!(normalize_path("health"), Some("/health".to_string()));
+        assert_eq!(normalize_path("  /health  "), Some("/health".to_string()));
+        assert_eq!(normalize_path("/health/"), Some("/health".to_string()));
+        assert_eq!(normalize_path("/health?x=1"), Some("/health".to_string()));
+        assert_eq!(normalize_path("/"), Some("/".to_string()));
+        assert_eq!(normalize_path("///"), Some("/".to_string()));
+        assert_eq!(normalize_path(""), None);
+        assert_eq!(normalize_path("   "), None);
+        assert_eq!(normalize_path("?only=query"), None);
+    }
+
+    #[test]
+    fn test_excluded_paths_default_empty() {
+        let config = base_config();
+        assert!(config.excluded_paths.is_empty());
+        assert!(!config.is_excluded(&Method::GET, "/"));
+        assert!(!config.is_excluded(&Method::GET, "/health"));
+    }
+
+    #[test]
+    fn test_with_excluded_paths_normalizes_and_dedups() {
+        let config = base_config().with_excluded_paths([
+            "/health",
+            "health/",
+            "  /ready  ",
+            "",
+            "/ready?probe=1",
+        ]);
+        assert_eq!(config.excluded_paths, vec!["/health", "/ready"]);
+    }
+
+    #[test]
+    fn test_is_excluded_matches_get_and_head_only() {
+        let config = base_config().with_excluded_paths(["/health"]);
+        assert!(config.is_excluded(&Method::GET, "/health"));
+        assert!(config.is_excluded(&Method::HEAD, "/health"));
+        assert!(config.is_excluded(&Method::GET, "/health/"));
+        assert!(config.is_excluded(&Method::GET, "/health?deep=true"));
+        assert!(!config.is_excluded(&Method::POST, "/health"));
+        assert!(!config.is_excluded(&Method::PUT, "/health"));
+        assert!(!config.is_excluded(&Method::DELETE, "/health"));
+    }
+
+    #[test]
+    fn test_is_excluded_exact_match_only() {
+        let config = base_config().with_excluded_paths(["/health"]);
+        assert!(!config.is_excluded(&Method::GET, "/healthz"));
+        assert!(!config.is_excluded(&Method::GET, "/health/live"));
+        assert!(!config.is_excluded(&Method::GET, "/api/health"));
+        assert!(!config.is_excluded(&Method::GET, "/"));
+    }
+
+    fn env_from<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |name| {
+            pairs
+                .iter()
+                .find(|(k, _)| *k == name)
+                .map(|(_, v)| v.to_string())
+        }
+    }
+
+    #[test]
+    fn test_clever_cloud_paths_none() {
+        let paths = clever_cloud_health_check_paths_from(env_from(&[]));
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_clever_cloud_paths_single() {
+        let paths =
+            clever_cloud_health_check_paths_from(env_from(&[("CC_HEALTH_CHECK_PATH", "/health")]));
+        assert_eq!(paths, vec!["/health"]);
+    }
+
+    #[test]
+    fn test_clever_cloud_paths_indexed() {
+        let paths = clever_cloud_health_check_paths_from(env_from(&[
+            ("CC_HEALTH_CHECK_PATH_0", "/health"),
+            ("CC_HEALTH_CHECK_PATH_1", "/ready"),
+            // gap at 2: index 3 must be ignored
+            ("CC_HEALTH_CHECK_PATH_3", "/ignored"),
+        ]));
+        assert_eq!(paths, vec!["/health", "/ready"]);
+    }
+
+    #[test]
+    fn test_clever_cloud_paths_single_and_indexed() {
+        let paths = clever_cloud_health_check_paths_from(env_from(&[
+            ("CC_HEALTH_CHECK_PATH", "/health"),
+            ("CC_HEALTH_CHECK_PATH_0", "/ready"),
+        ]));
+        assert_eq!(paths, vec!["/health", "/ready"]);
+    }
+
+    #[test]
+    fn test_clever_cloud_paths_skip_blank_values() {
+        let paths = clever_cloud_health_check_paths_from(env_from(&[
+            ("CC_HEALTH_CHECK_PATH", "   "),
+            ("CC_HEALTH_CHECK_PATH_0", ""),
+            ("CC_HEALTH_CHECK_PATH_1", "/ready"),
+        ]));
+        assert_eq!(paths, vec!["/ready"]);
     }
 }
