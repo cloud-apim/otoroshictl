@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- `cloud-apim login` signs in with the new Cloud APIM console: a device authorization (RFC 8628), the code approved in
+  the console, and a personal token of the public API (`api.cloud-apim.com/v1`), scoped and revocable, instead of a
+  long-lived apikey
+- `cloud-apim list` lists the managed Otoroshi instances of every organisation of the token, with their organisation
+  and their id; `link`, `use` and `restart` take a name or an id
+- `cloud-apim logout` revokes the token on the console
+
+### Added
+- `CLOUD_APIM_API_URL` to point `otoroshictl` to another Cloud APIM console
+- `OTOROSHICTL_NO_BROWSER` to sign in without opening a browser
+
+---
+
 ## [0.0.17] - 2026-02-22
 
 ### Added
