@@ -8,7 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- `--exclude-path` option for the challenge proxy to forward health check paths (GET/HEAD) to the backend without challenge verification
+- Native support for Clever Cloud `CC_HEALTH_CHECK_PATH` and `CC_HEALTH_CHECK_PATH_<n>` variables in the challenge proxy
+- `CLOUD_APIM_API_URL` to point `otoroshictl` to another Cloud APIM console
+- `OTOROSHICTL_NO_BROWSER` to sign in without opening a browser
+
 ### Changed
+- Move to `hyper` 1 and update the dependencies
+- Accept PKCS#1 and SEC1 private keys for certificates, not only PKCS#8
+- Show the cause of HTTP client errors
+- Sidecar inbound mTLS fails at startup when the CA certificate is invalid
 - `cloud-apim login` signs in with the new Cloud APIM console: a device authorization (RFC 8628), the code approved in
   the console, and a personal token of the public API (`api.cloud-apim.com/v1`), scoped and revocable, instead of a
   long-lived apikey
@@ -16,9 +26,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   and their id; `link`, `use` and `restart` take a name or an id
 - `cloud-apim logout` revokes the token on the console
 
-### Added
-- `CLOUD_APIM_API_URL` to point `otoroshictl` to another Cloud APIM console
-- `OTOROSHICTL_NO_BROWSER` to sign in without opening a browser
+### Security
+- Move to `rustls` 0.23 with `rustls-webpki` 0.103.16 and `webpki-roots` 1.0.10 to distrust the compromised eMudhra intermediate CAs
 
 ---
 

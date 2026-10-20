@@ -1,4 +1,7 @@
-//! Shared HTTP utilities for proxy functionality.
+//! Shared HTTP utilities: clients, server accept loop and proxy helpers.
+
+pub mod client;
+pub mod server;
 
 use http::header::HeaderName;
 

@@ -533,6 +533,16 @@ pub enum ChallengeSubCommand {
         /// to the backend. By default they are stripped.
         #[arg(long, action = clap::ArgAction::SetTrue, env = "OTOROSHI_CHALLENGE_KEEP_HEADERS")]
         keep_otoroshi_headers: bool,
+        /// Path forwarded to the backend without challenge verification (GET/HEAD only), for
+        /// health checks. Repeatable or comma-separated. Clever Cloud `CC_HEALTH_CHECK_PATH`
+        /// and `CC_HEALTH_CHECK_PATH_<n>` variables are always taken into account.
+        #[arg(
+            long,
+            value_name = "PATH",
+            value_delimiter = ',',
+            env = "OTOROSHI_CHALLENGE_EXCLUDE_PATHS"
+        )]
+        exclude_path: Vec<String>,
     },
 }
 

@@ -1,25 +1,24 @@
 use crate::cli::cliopts::CliOpts;
+use crate::http_utils::client::{HttpsClient, mtls_client, native_roots_client};
+use crate::http_utils::server::{bind, serve};
 use crate::sidecar::config::{
     OtoroshiSidecarConfigSpecOtoroshiSettingsLocationKubernetesLocation,
     OtoroshiSidecarConfigSpecOtoroshiSettingsRoutingLocation,
 };
 use futures_util::Future;
 use http::Response;
-use hyper::client::ResponseFuture;
+use hyper::Request;
+use hyper::body::Incoming;
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Server};
-use hyper_rustls::HttpsConnector;
+use hyper_util::client::legacy::ResponseFuture;
 use moka::sync::{Cache, CacheBuilder};
-use rustls::{OwnedTrustAnchor, RootCertStore};
 
 use super::cache::{OtoroshiCertificate, SidecarCache};
 use super::config::OtoroshiSidecarConfig;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 use rand::prelude::IndexedRandom;
 
@@ -27,76 +26,40 @@ use rand::prelude::IndexedRandom;
 struct OutboundProxyClient {
     cli_opts: CliOpts,
     config: OtoroshiSidecarConfig,
-    tls_client: Client<HttpsConnector<hyper::client::HttpConnector>>,
-    mtls_clients: Cache<String, Client<HttpsConnector<hyper::client::HttpConnector>>>,
+    tls_client: HttpsClient<Incoming>,
+    mtls_clients: Cache<String, HttpsClient<Incoming>>,
 }
 
 impl OutboundProxyClient {
     fn new(config: OtoroshiSidecarConfig, cli_opts: CliOpts) -> OutboundProxyClient {
-        let tls_client: Client<HttpsConnector<hyper::client::HttpConnector>> = {
-            let https = hyper_rustls::HttpsConnectorBuilder::new()
-                .with_native_roots()
-                .https_or_http()
-                .enable_http1()
-                .build();
-            let client: Client<HttpsConnector<hyper::client::HttpConnector>> =
-                Client::builder().build::<_, hyper::Body>(https);
-            client
-        };
         OutboundProxyClient {
             cli_opts,
             config,
-            tls_client,
+            tls_client: native_roots_client(),
             mtls_clients: CacheBuilder::new(50)
                 .time_to_live(std::time::Duration::from_secs(120))
                 .build(),
         }
     }
 
-    fn mtls_client(
-        &self,
-        id: String,
-        client_cert: OtoroshiCertificate,
-    ) -> Client<HttpsConnector<hyper::client::HttpConnector>> {
+    fn mtls_client(&self, id: String, client_cert: OtoroshiCertificate) -> HttpsClient<Incoming> {
         match self.mtls_clients.get(&id) {
             Some(client) => client.clone(),
             None => {
-                let client_tls: Client<HttpsConnector<hyper::client::HttpConnector>> = {
-                    let mut root_store = RootCertStore::empty();
-                    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-                        OwnedTrustAnchor::from_subject_spki_name_constraints(
-                            ta.subject,
-                            ta.spki,
-                            ta.name_constraints,
-                        )
-                    }));
-                    let tls = rustls::ClientConfig::builder()
-                        .with_safe_defaults()
-                        .with_root_certificates(root_store)
-                        .with_client_auth_cert(client_cert.certs(), client_cert.key())
-                        .unwrap();
-                    let https = hyper_rustls::HttpsConnectorBuilder::new()
-                        .with_tls_config(tls)
-                        .https_or_http()
-                        .enable_http1()
-                        .build();
-                    let client: Client<HttpsConnector<hyper::client::HttpConnector>> =
-                        Client::builder().build::<_, hyper::Body>(https);
-                    client
-                };
+                let client_tls = mtls_client(client_cert.certs(), client_cert.key());
                 self.mtls_clients.insert(id, client_tls.clone());
                 client_tls.clone()
             }
         }
     }
 
-    fn pass_through(&self, req: Request<Body>) -> ResponseFuture {
+    fn pass_through(&self, req: Request<Incoming>) -> ResponseFuture {
         self.tls_client.request(req)
     }
 
     fn request(
         &self,
-        mut req: Request<Body>,
+        mut req: Request<Incoming>,
         client_cert: Option<(String, OtoroshiCertificate)>,
     ) -> ResponseFuture {
         let otoroshi_spec = self
@@ -163,22 +126,26 @@ impl OutboundProxy {
         cli_opts: CliOpts,
         config: OtoroshiSidecarConfig,
         cache: Arc<SidecarCache>,
-    ) -> impl Future<Output = std::result::Result<(), hyper::Error>> {
+    ) -> impl Future<Output = ()> {
         let in_addr: SocketAddr = SocketAddr::new(
             "127.0.0.1".parse().unwrap(),
             config.spec.outbounds.port.unwrap_or(15001),
         );
         let client = OutboundProxyClient::new(config.clone(), cli_opts);
-        let server = Server::bind(&in_addr).serve(MakeSvc {
+        let svc = Svc {
             client,
             config,
             cache,
-        });
-        info!(target: "outbound_proxy", "listening on http://{}", in_addr);
-        server
+        };
+        async move {
+            let listener = bind(in_addr).await;
+            info!(target: "outbound_proxy", "listening on http://{}", in_addr);
+            serve(listener, None, svc, std::future::pending()).await
+        }
     }
 }
 
+#[derive(Clone)]
 struct Svc {
     client: OutboundProxyClient,
     config: OtoroshiSidecarConfig,
@@ -239,16 +206,12 @@ impl Svc {
     }
 }
 
-impl Service<Request<Body>> for Svc {
-    type Response = Response<Body>;
-    type Error = hyper::Error;
+impl Service<Request<Incoming>> for Svc {
+    type Response = Response<Incoming>;
+    type Error = hyper_util::client::legacy::Error;
     type Future = ResponseFuture;
 
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+    fn call(&self, mut req: Request<Incoming>) -> Self::Future {
         let mut headers = req.headers().clone();
         //let host = headers.get("Host").unwrap();
         let default_value = http::HeaderValue::from_str("localhost").unwrap();
@@ -283,35 +246,5 @@ impl Service<Request<Body>> for Svc {
         } else {
             self.client.pass_through(req)
         }
-    }
-}
-
-struct MakeSvc {
-    client: OutboundProxyClient,
-    config: OtoroshiSidecarConfig,
-    cache: Arc<SidecarCache>,
-}
-
-impl<T> Service<T> for MakeSvc {
-    type Response = Svc;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, _: T) -> Self::Future {
-        let client = self.client.clone();
-        let config = self.config.clone();
-        let cache = self.cache.clone();
-        let future = async move {
-            Ok(Svc {
-                client,
-                config,
-                cache,
-            })
-        };
-        Box::pin(future)
     }
 }

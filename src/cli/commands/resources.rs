@@ -2,6 +2,9 @@ extern crate json_value_merge;
 
 use crate::cli::cliopts::{CliOpts, ResourcesSubCommand};
 use crate::cli::commands::entities::OtoroshExposedResource;
+use crate::http_utils::client::{
+    RequestBody, error_chain, http_client, native_roots_client, read_body,
+};
 use crate::utils::entity::EntityHelper;
 use crate::utils::otoroshi::Otoroshi;
 use crate::utils::table::{TableHelper, TableResource};
@@ -73,7 +76,7 @@ impl ResourcesCommand {
             )
             .as_str(),
             None,
-            Some(hyper::Body::from(content)),
+            Some(RequestBody::from(content)),
             Some("application/json".to_string()),
             config,
         )
@@ -143,7 +146,7 @@ impl ResourcesCommand {
             )
             .as_str(),
             None,
-            Some(hyper::Body::from(content)),
+            Some(RequestBody::from(content)),
             Some("application/yaml".to_string()),
             config,
         )
@@ -215,7 +218,7 @@ impl ResourcesCommand {
             )
             .as_str(),
             None,
-            Some(hyper::Body::from(content)),
+            Some(RequestBody::from(content)),
             Some("application/yaml".to_string()),
             config,
         )
@@ -459,11 +462,15 @@ impl ResourcesCommand {
             .method(hyper::Method::GET)
             .uri(url.clone())
             .header("accept", "application/json, application/yaml".to_string())
-            .body(hyper::Body::empty())
+            .body(RequestBody::default())
             .unwrap();
-        match hyper::Client::new().request(req).await {
+        match http_client().request(req).await {
             Err(err) => {
-                cli_stderr_printline!("error while fetching https resource {}: \n\n{}", url, err);
+                cli_stderr_printline!(
+                    "error while fetching https resource {}: \n\n{}",
+                    url,
+                    error_chain(&err)
+                );
                 std::process::exit(-1)
             }
             Ok(resp) => {
@@ -474,7 +481,7 @@ impl ResourcesCommand {
                     .map(|i| i.to_str().unwrap().to_string())
                     .unwrap_or("application/json".to_string());
                 if status == 200 {
-                    let body_bytes: hyper::body::Bytes = hyper::body::to_bytes(resp).await.unwrap();
+                    let body_bytes: hyper::body::Bytes = read_body(resp).await.unwrap();
                     (body_bytes, content_type)
                 } else {
                     cli_stderr_printline!(
@@ -493,17 +500,15 @@ impl ResourcesCommand {
             .method(hyper::Method::GET)
             .uri(url.clone())
             .header("accept", "application/json, application/yaml".to_string())
-            .body(hyper::Body::empty())
+            .body(RequestBody::default())
             .unwrap();
-        let https = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
-        let client = hyper::Client::builder().build::<_, hyper::Body>(https);
-        match client.request(req).await {
+        match native_roots_client().request(req).await {
             Err(err) => {
-                cli_stderr_printline!("error while fetching https resource {}: \n\n{}", url, err);
+                cli_stderr_printline!(
+                    "error while fetching https resource {}: \n\n{}",
+                    url,
+                    error_chain(&err)
+                );
                 std::process::exit(-1)
             }
             Ok(resp) => {
@@ -514,7 +519,7 @@ impl ResourcesCommand {
                     .map(|i| i.to_str().unwrap().to_string())
                     .unwrap_or("application/json".to_string());
                 if status == 200 {
-                    let body_bytes: hyper::body::Bytes = hyper::body::to_bytes(resp).await.unwrap();
+                    let body_bytes: hyper::body::Bytes = read_body(resp).await.unwrap();
                     (body_bytes, content_type)
                 } else {
                     cli_stderr_printline!(
@@ -1887,7 +1892,7 @@ spec:
                     Method::POST,
                     "/api/otoroshi.json",
                     None,
-                    Some(hyper::Body::from(content)),
+                    Some(RequestBody::from(content)),
                     content_type,
                     cconfig.clone(),
                 )

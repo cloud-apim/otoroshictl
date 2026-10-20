@@ -2,10 +2,11 @@ use crate::cli::cliopts::CliOpts;
 use crate::utils::otoroshi::Otoroshi;
 use serde::{Deserialize, Serialize};
 
+use crate::http_utils::client::{RequestBody, http_client, read_body};
 use base64::{Engine as _, engine::general_purpose};
 use futures_util::{SinkExt, StreamExt};
+use hyper::Request;
 use hyper::http::request::Builder;
-use hyper::{Client, Request};
 use std::collections::HashMap;
 use std::time::Instant;
 use tokio_tungstenite::{
@@ -87,7 +88,7 @@ impl Tunnel {
         let tunnel_id = opts.tunnel;
         let scheme = if config.tls { "wss" } else { "ws" };
         let host = config.host;
-        let client = Client::new();
+        let client = http_client();
         let credentials =
             general_purpose::STANDARD_NO_PAD.encode(format!("{}:{}", config.cid, config.csec));
         let url_raw = format!(
@@ -97,7 +98,7 @@ impl Tunnel {
         // debug!("url_raw {} {}", opts.tls, url_raw);
         let url = Url::parse(url_raw.as_str()).expect("Bad URL");
         // TODO: connect tls
-        let (ws_stream, _) = Box::leak(Box::new(connect_async(url).await?));
+        let (ws_stream, _) = Box::leak(Box::new(connect_async(url.as_str()).await?));
 
         info!("connection done !");
         info!("");
@@ -124,13 +125,13 @@ impl Tunnel {
                         builder = builder.header(header.0, header.1.as_str().unwrap());
                     }
                     let maybe_body = json.get("body");
-                    let req: Request<hyper::Body> = if maybe_body.is_some() {
+                    let req: Request<RequestBody> = if maybe_body.is_some() {
                         let body_bytes = general_purpose::STANDARD_NO_PAD
                             .decode(maybe_body.unwrap().as_str().unwrap())
                             .unwrap();
-                        builder.body(hyper::Body::from(body_bytes)).unwrap()
+                        builder.body(RequestBody::from(body_bytes)).unwrap()
                     } else {
-                        builder.body(hyper::Body::empty()).unwrap()
+                        builder.body(RequestBody::default()).unwrap()
                     };
                     let resp = client.request(req).await.unwrap();
                     let status = resp.status();
@@ -139,7 +140,7 @@ impl Tunnel {
                     for (key, value) in resp_headers.iter() {
                         resp_headers_map.insert(key.as_str(), value.to_str().unwrap());
                     }
-                    let body_bytes = hyper::body::to_bytes(resp).await.unwrap();
+                    let body_bytes = read_body(resp).await.unwrap();
                     let body_str = general_purpose::STANDARD_NO_PAD.encode(body_bytes);
                     let resp_json = serde_json::json!({
                         "status": status.as_u16(),
@@ -160,7 +161,7 @@ impl Tunnel {
                         status.as_u16(),
                         elasped.as_millis()
                     );
-                    match ws_stream.send(Message::Binary(resp_json_bin)).await {
+                    match ws_stream.send(Message::Binary(resp_json_bin.into())).await {
                         Ok(_) => (),
                         Err(e) => debug!("error while sending response: {}", e),
                     };
@@ -170,7 +171,7 @@ impl Tunnel {
                         "type": "ping"
                     });
                     let bytes = serde_json::to_vec(&json).unwrap();
-                    match ws_stream.send(Message::Binary(bytes)).await {
+                    match ws_stream.send(Message::Binary(bytes.into())).await {
                         Ok(_) => (),
                         Err(e) => debug!("error while sending pong: {}", e),
                     };
@@ -189,7 +190,7 @@ impl Tunnel {
                         ])
                     });
                     let bytes1 = serde_json::to_vec(&json1).unwrap();
-                    match ws_stream.send(Message::Binary(bytes1)).await {
+                    match ws_stream.send(Message::Binary(bytes1.into())).await {
                         Ok(_) => (),
                         Err(e) => debug!("error while sending meta: {}", e),
                     };

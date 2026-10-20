@@ -1,8 +1,6 @@
 use cli_table::{Cell, Style, Table, print_stdout};
 use http::Method;
 use http::Request;
-use hyper::Client;
-use hyper_rustls::HttpsConnector;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -10,6 +8,7 @@ use crate::cli::cliopts::CliOpts;
 use crate::cli::config::OtoroshiCtlConfigCloudApim;
 use crate::cli_stderr_printline;
 use crate::cli_stdout_printline;
+use crate::http_utils::client::{RequestBody, error_chain, native_roots_client, read_body};
 
 /// The public API of Cloud APIM, overridable with `CLOUD_APIM_API_URL` (a console in development, for instance).
 const DEFAULT_API_URL: &str = "https://api.cloud-apim.com";
@@ -118,28 +117,24 @@ impl CloudApimCommands {
         if let Some(token) = token {
             builder = builder.header("Authorization", format!("Bearer {}", token));
         }
-        let req: Request<hyper::Body> = match body {
+        let req: Request<RequestBody> = match body {
             Some((content_type, content)) => builder
                 .header("Content-Type", content_type)
-                .body(hyper::Body::from(content))
+                .body(RequestBody::from(content))
                 .unwrap(),
-            None => builder.body(hyper::Body::empty()).unwrap(),
+            None => builder.body(RequestBody::default()).unwrap(),
         };
-        let https = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
-        let client: Client<HttpsConnector<hyper::client::HttpConnector>> =
-            Client::builder().build::<_, hyper::Body>(https);
-        match client.request(req).await {
+        match native_roots_client().request(req).await {
             Err(err) => {
-                cli_stderr_printline!("error while calling the cloud-apim api: \n\n{}", err);
+                cli_stderr_printline!(
+                    "error while calling the cloud-apim api: \n\n{}",
+                    error_chain(&err)
+                );
                 std::process::exit(-1)
             }
             Ok(resp) => {
                 let status = resp.status().as_u16();
-                let body_bytes = hyper::body::to_bytes(resp).await.unwrap();
+                let body_bytes = read_body(resp).await.unwrap();
                 CloudApimResponse { status, body_bytes }
             }
         }
