@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use hyper::{Client, Method, Request};
-use hyper_rustls::HttpsConnector;
-use rustls::{OwnedTrustAnchor, RootCertStore};
+use hyper::{Method, Request};
 use serde::{Deserialize, Serialize};
 
 use base64::{Engine as _, engine::general_purpose};
@@ -15,6 +13,9 @@ use crate::cli::commands::{
 use crate::cli::config::OtoroshiCtlConfigSpecClusterClientCert;
 use crate::cli_stderr_printline;
 use crate::commands::entities::OtoroshExposedResource;
+use crate::http_utils::client::{
+    RequestBody, error_chain, http_client, mtls_client, native_roots_client, read_body,
+};
 use crate::sidecar::cache::OtoroshiCertificate;
 use crate::tunnels::remote::RemoteTunnelCommandOpts;
 
@@ -78,7 +79,7 @@ impl Otoroshi {
         method: hyper::Method,
         path: &str,
         accept: Option<String>,
-        body: Option<hyper::Body>,
+        body: Option<RequestBody>,
         content_type: Option<String>,
         opts: OtoroshiConnectionConfig,
     ) -> OtoroshiResponse {
@@ -114,7 +115,7 @@ impl Otoroshi {
             // builder = builder.header("Content-Type", "application/json")
             builder = builder.header("Content-Type", content_type.unwrap());
         }
-        let req: Request<hyper::Body> = builder.body(body.unwrap_or(hyper::Body::empty())).unwrap();
+        let req: Request<RequestBody> = builder.body(body.unwrap_or_default()).unwrap();
         let resp_result = if opts.tls {
             if opts.mtls.is_some() {
                 let mtls = opts.mtls.unwrap();
@@ -149,47 +150,21 @@ impl Otoroshi {
                             }
                         },
                     };
-                let client: Client<HttpsConnector<hyper::client::HttpConnector>> = {
-                    let mut root_store = RootCertStore::empty();
-                    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-                        OwnedTrustAnchor::from_subject_spki_name_constraints(
-                            ta.subject,
-                            ta.spki,
-                            ta.name_constraints,
-                        )
-                    }));
-                    let tls = rustls::ClientConfig::builder()
-                        .with_safe_defaults()
-                        .with_root_certificates(root_store)
-                        .with_client_auth_cert(client_cert.certs(), client_cert.key())
-                        .unwrap();
-                    let https = hyper_rustls::HttpsConnectorBuilder::new()
-                        .with_tls_config(tls)
-                        .https_or_http()
-                        .enable_http1()
-                        .build();
-                    let client: Client<HttpsConnector<hyper::client::HttpConnector>> =
-                        Client::builder().build::<_, hyper::Body>(https);
-                    client
-                };
-                client.request(req).await
+                mtls_client(client_cert.certs(), client_cert.key())
+                    .request(req)
+                    .await
             } else {
-                let https = hyper_rustls::HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .https_or_http()
-                    .enable_http1()
-                    .build();
-                let client: Client<HttpsConnector<hyper::client::HttpConnector>> =
-                    Client::builder().build::<_, hyper::Body>(https);
-                client.request(req).await
+                native_roots_client().request(req).await
             }
         } else {
-            let client = Client::new();
-            client.request(req).await
+            http_client().request(req).await
         };
         match resp_result {
             Err(err) => {
-                cli_stderr_printline!("error while calling otoroshi api: \n\n{}", err);
+                cli_stderr_printline!(
+                    "error while calling otoroshi api: \n\n{}",
+                    error_chain(&err)
+                );
                 std::process::exit(-1)
             }
             Ok(resp) => {
@@ -201,7 +176,7 @@ impl Otoroshi {
                         header.1.to_str().unwrap().to_string(),
                     );
                 }
-                let body_bytes = hyper::body::to_bytes(resp).await.unwrap();
+                let body_bytes = read_body(resp).await.unwrap();
                 // debug!("status: {}, body: {:?}", status, body_bytes);
                 OtoroshiResponse {
                     status,
@@ -315,7 +290,7 @@ impl Otoroshi {
             Method::PUT,
             "/api/globalconfig",
             None,
-            Some(hyper::Body::from(body)),
+            Some(RequestBody::from(body)),
             Some("application/json".to_string()),
             config,
         )
@@ -366,7 +341,7 @@ impl Otoroshi {
             )
             .as_str(),
             None,
-            Some(hyper::Body::from(body)),
+            Some(RequestBody::from(body)),
             Some("application/json".to_string()),
             config,
         )
@@ -393,7 +368,7 @@ impl Otoroshi {
             )
             .as_str(),
             None,
-            Some(hyper::Body::from(body)),
+            Some(RequestBody::from(body)),
             Some(content_type),
             config,
         )
@@ -419,7 +394,7 @@ impl Otoroshi {
             )
             .as_str(),
             None,
-            Some(hyper::Body::from(body)),
+            Some(RequestBody::from(body)),
             Some(content_type),
             config,
         )
@@ -746,7 +721,7 @@ impl Otoroshi {
             hyper::Method::POST,
             "/api/routes",
             Some("application/json".to_string()),
-            Some(hyper::Body::from(json)),
+            Some(RequestBody::from(json)),
             Some("application/json".to_string()),
             config,
         )
@@ -789,7 +764,7 @@ impl Otoroshi {
             method,
             path,
             None,
-            Some(hyper::Body::from(json_str)),
+            Some(RequestBody::from(json_str)),
             Some("application/json".to_string()),
             config,
         )

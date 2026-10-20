@@ -12,6 +12,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `--exclude-path` option for the challenge proxy to forward health check paths (GET/HEAD) to the backend without challenge verification
 - Native support for Clever Cloud `CC_HEALTH_CHECK_PATH` and `CC_HEALTH_CHECK_PATH_<n>` variables in the challenge proxy
 
+### Changed
+- Move to `hyper` 1 and update the dependencies
+- Accept PKCS#1 and SEC1 private keys for certificates, not only PKCS#8
+- Show the cause of HTTP client errors
+- Sidecar inbound mTLS fails at startup when the CA certificate is invalid
+
+### Security
+- Move to `rustls` 0.23 with `rustls-webpki` 0.103.16 and `webpki-roots` 1.0.10 to distrust the compromised eMudhra intermediate CAs
+
 ---
 
 ## [0.0.17] - 2026-02-22

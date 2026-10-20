@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use moka::sync::Cache;
 use moka::sync::CacheBuilder;
-use rustls::Certificate;
-use rustls::PrivateKey;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -64,18 +64,13 @@ pub struct OtoroshiCertificate {
 }
 
 impl OtoroshiCertificate {
-    pub fn certs(&self) -> Vec<Certificate> {
-        let streader = stringreader::StringReader::new(self.chain.as_str());
-        let mut bufreader = std::io::BufReader::new(streader);
-        let certs = rustls_pemfile::certs(&mut bufreader).unwrap();
-        certs.into_iter().map(Certificate).collect()
+    pub fn certs(&self) -> Vec<CertificateDer<'static>> {
+        CertificateDer::pem_slice_iter(self.chain.as_bytes())
+            .collect::<Result<_, _>>()
+            .unwrap()
     }
-    pub fn key(&self) -> PrivateKey {
-        let streader = stringreader::StringReader::new(self.privateKey.as_str());
-        let mut bufreader = std::io::BufReader::new(streader);
-        let keys_raw = rustls_pemfile::pkcs8_private_keys(&mut bufreader).unwrap();
-        let keys: Vec<PrivateKey> = keys_raw.into_iter().map(PrivateKey).collect();
-        keys.first().unwrap().to_owned()
+    pub fn key(&self) -> PrivateKeyDer<'static> {
+        PrivateKeyDer::from_pem_slice(self.privateKey.as_bytes()).unwrap()
     }
 }
 

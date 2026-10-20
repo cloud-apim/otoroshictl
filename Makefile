@@ -9,7 +9,7 @@ build:
 
 # Unit tests (fast, no Docker required)
 test-unit:
-	cargo test --test config_tests --test smoke_tests --test challenge_tests --test toolbox_tests
+	cargo test --bin otoroshictl --test config_tests --test smoke_tests --test challenge_tests --test toolbox_tests
 
 # Start Otoroshi for integration tests (timeout: 2 minutes)
 otoroshi-start:
@@ -52,7 +52,7 @@ test: test-unit
 check:
 	cargo fmt -- --check || echo "Warning: formatting issues found (run 'make fmt' to fix)"
 	cargo clippy || echo "Warning: clippy issues found"
-	cargo test --test config_tests --test smoke_tests --test challenge_tests --test toolbox_tests
+	cargo test --bin otoroshictl --test config_tests --test smoke_tests --test challenge_tests --test toolbox_tests
 
 # Format code
 fmt:

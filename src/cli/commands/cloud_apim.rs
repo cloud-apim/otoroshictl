@@ -5,9 +5,7 @@ use chrono::prelude::*;
 use cli_table::{Cell, Style, Table, print_stdout};
 use http::Method;
 use http::Request;
-use hyper::Client;
-use hyper_rustls::HttpsConnector;
-use rand::Rng;
+use rand::RngExt;
 use rand::distr::Alphanumeric;
 use serde::Deserialize;
 use serde::Serialize;
@@ -16,6 +14,7 @@ use crate::cli::cliopts::CliOpts;
 use crate::cli::config::OtoroshiCtlConfigCloudApim;
 use crate::cli_stderr_printline;
 use crate::cli_stdout_printline;
+use crate::http_utils::client::{RequestBody, error_chain, native_roots_client, read_body};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CloudApimDeployments {
@@ -77,7 +76,7 @@ impl CloudApimCommands {
         method: hyper::Method,
         path: &str,
         accept: Option<String>,
-        body: Option<hyper::Body>,
+        body: Option<RequestBody>,
         content_type: Option<String>,
     ) -> CloudApimResponse {
         let scheme = "https";
@@ -96,20 +95,14 @@ impl CloudApimCommands {
             // builder = builder.header("Content-Type", "application/json")
             builder = builder.header("Content-Type", content_type.clone().unwrap());
         }
-        let req: Request<hyper::Body> = builder.body(body.unwrap_or(hyper::Body::empty())).unwrap();
-        let resp_result = {
-            let https = hyper_rustls::HttpsConnectorBuilder::new()
-                .with_native_roots()
-                .https_or_http()
-                .enable_http1()
-                .build();
-            let client: Client<HttpsConnector<hyper::client::HttpConnector>> =
-                Client::builder().build::<_, hyper::Body>(https);
-            client.request(req).await
-        };
+        let req: Request<RequestBody> = builder.body(body.unwrap_or_default()).unwrap();
+        let resp_result = native_roots_client().request(req).await;
         match resp_result {
             Err(err) => {
-                cli_stderr_printline!("error while calling cloud-apim api: \n\n{}", err);
+                cli_stderr_printline!(
+                    "error while calling cloud-apim api: \n\n{}",
+                    error_chain(&err)
+                );
                 std::process::exit(-1)
             }
             Ok(resp) => {
@@ -121,7 +114,7 @@ impl CloudApimCommands {
                         header.1.to_str().unwrap().to_string(),
                     );
                 }
-                let body_bytes = hyper::body::to_bytes(resp).await.unwrap();
+                let body_bytes = read_body(resp).await.unwrap();
                 // debug!("status: {}, body: {:?}", status, body_bytes);
                 CloudApimResponse {
                     status,
@@ -137,7 +130,7 @@ impl CloudApimCommands {
         method: hyper::Method,
         path: &str,
         accept: Option<String>,
-        body: Option<hyper::Body>,
+        body: Option<RequestBody>,
         content_type: Option<String>,
         config: OtoroshiCtlConfigCloudApim,
         token: CloudApimToken,
@@ -159,20 +152,14 @@ impl CloudApimCommands {
             // builder = builder.header("Content-Type", "application/json")
             builder = builder.header("Content-Type", content_type.clone().unwrap());
         }
-        let req: Request<hyper::Body> = builder.body(body.unwrap_or(hyper::Body::empty())).unwrap();
-        let resp_result = {
-            let https = hyper_rustls::HttpsConnectorBuilder::new()
-                .with_native_roots()
-                .https_or_http()
-                .enable_http1()
-                .build();
-            let client: Client<HttpsConnector<hyper::client::HttpConnector>> =
-                Client::builder().build::<_, hyper::Body>(https);
-            client.request(req).await
-        };
+        let req: Request<RequestBody> = builder.body(body.unwrap_or_default()).unwrap();
+        let resp_result = native_roots_client().request(req).await;
         match resp_result {
             Err(err) => {
-                cli_stderr_printline!("error while calling cloud-apim api: \n\n{}", err);
+                cli_stderr_printline!(
+                    "error while calling cloud-apim api: \n\n{}",
+                    error_chain(&err)
+                );
                 std::process::exit(-1)
             }
             Ok(resp) => {
@@ -198,7 +185,7 @@ impl CloudApimCommands {
                             header.1.to_str().unwrap().to_string(),
                         );
                     }
-                    let body_bytes = hyper::body::to_bytes(resp).await.unwrap();
+                    let body_bytes = read_body(resp).await.unwrap();
                     // debug!("status: {}, body: {:?}", status, body_bytes);
                     CloudApimResponse {
                         status,
@@ -214,7 +201,7 @@ impl CloudApimCommands {
         method: hyper::Method,
         path: &str,
         accept: Option<String>,
-        body: Option<hyper::Body>,
+        body: Option<RequestBody>,
         content_type: Option<String>,
         config: OtoroshiCtlConfigCloudApim,
     ) -> CloudApimResponse {
@@ -287,7 +274,7 @@ impl CloudApimCommands {
             Method::POST,
             format!("/api/deployments/{}/_restart", uid).as_str(),
             Some("application/json".to_string()),
-            Some(hyper::Body::from("")),
+            Some(RequestBody::from("")),
             Some("application/json".to_string()),
             config,
         )
@@ -317,7 +304,7 @@ impl CloudApimCommands {
             Method::POST,
             "/oauth/token",
             Some("application/json".to_string()),
-            Some(hyper::Body::from(body)),
+            Some(RequestBody::from(body)),
             Some("application/json".to_string()),
         )
         .await;
