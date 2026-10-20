@@ -73,7 +73,7 @@ jobs:
             ${{ runner.os }}-cargo-test-
 
       - name: Run unit tests
-        run: cargo test --test config_tests --test smoke_tests
+        run: cargo test --bin otoroshictl --test config_tests --test smoke_tests --test challenge_tests --test toolbox_tests
 
   build:
     name: Build
