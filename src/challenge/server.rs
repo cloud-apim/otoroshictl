@@ -2,20 +2,30 @@
 
 use futures_util::Future;
 use http::Response;
-use hyper::client::{HttpConnector, ResponseFuture};
+use http_body_util::combinators::UnsyncBoxBody;
+use http_body_util::{BodyExt, Full};
+use hyper::Request;
+use hyper::body::{Body, Bytes};
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Server};
+use hyper_util::client::legacy::ResponseFuture;
 use serde::Serialize;
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 use crate::challenge::config::{ProtocolVersion, ProxyConfig, clever_cloud_health_check_paths};
 use crate::cli_stderr_printline;
 use crate::cli_stdout_printline;
+use crate::http_utils::client::{HttpClient, http_client};
 use crate::http_utils::is_hop_by_hop_header;
+use crate::http_utils::server::{bind, serve};
 use crate::otoroshi::protocol::OtoroshiProtocol;
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+/// Body of the requests and responses going through the proxy, streamed as is.
+type ProxyBody = UnsyncBoxBody<Bytes, BoxError>;
 
 /// JSON structure for error responses.
 #[derive(Serialize)]
@@ -30,7 +40,7 @@ fn json_error_response(
     status: http::StatusCode,
     error: &str,
     details: Option<&str>,
-) -> Response<Body> {
+) -> Response<ProxyBody> {
     let body = ErrorResponse { error, details };
     let json = serde_json::to_string(&body).unwrap_or_else(|e| {
         error!("Failed to serialize error response: {}", e);
@@ -40,7 +50,11 @@ fn json_error_response(
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
-        .body(Body::from(json))
+        .body(
+            Full::new(Bytes::from(json))
+                .map_err(|never| match never {})
+                .boxed_unsync(),
+        )
         .expect("Failed to build error response")
 }
 
@@ -48,12 +62,12 @@ fn json_error_response(
 #[derive(Clone, Debug)]
 struct ProxyClient {
     config: Arc<ProxyConfig>,
-    http_client: Client<HttpConnector>,
+    http_client: HttpClient<ProxyBody>,
 }
 
 impl ProxyClient {
     fn new(config: Arc<ProxyConfig>) -> Self {
-        let http_client = Client::new();
+        let http_client = http_client();
         ProxyClient {
             config,
             http_client,
@@ -62,7 +76,7 @@ impl ProxyClient {
 
     fn forward_request(
         &self,
-        mut req: Request<Body>,
+        mut req: Request<ProxyBody>,
     ) -> Result<ResponseFuture, http::uri::InvalidUri> {
         let uri_string = format!(
             "{}{}",
@@ -79,21 +93,22 @@ impl ProxyClient {
 }
 
 /// Service handling individual requests.
+#[derive(Clone)]
 struct ProxySvc {
     client: ProxyClient,
     config: Arc<ProxyConfig>,
 }
 
-impl Service<Request<Body>> for ProxySvc {
-    type Response = Response<Body>;
-    type Error = hyper::Error;
+impl<B> Service<Request<B>> for ProxySvc
+where
+    B: Body<Data = Bytes> + Send + 'static,
+    B::Error: Into<BoxError>,
+{
+    type Response = Response<ProxyBody>;
+    type Error = Infallible;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&self, req: Request<B>) -> Self::Future {
         let config = self.config.clone();
         let client = self.client.clone();
 
@@ -323,16 +338,17 @@ impl Service<Request<Body>> for ProxySvc {
                 }
             }
 
-            let backend_req = match backend_req_builder.body(body) {
-                Ok(req) => req,
-                Err(e) => {
-                    return Ok(json_error_response(
-                        http::StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to build request",
-                        Some(&e.to_string()),
-                    ));
-                }
-            };
+            let backend_req =
+                match backend_req_builder.body(body.map_err(Into::into).boxed_unsync()) {
+                    Ok(req) => req,
+                    Err(e) => {
+                        return Ok(json_error_response(
+                            http::StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to build request",
+                            Some(&e.to_string()),
+                        ));
+                    }
+                };
 
             // Forward the request with timeout
             let backend_future = match client.forward_request(backend_req) {
@@ -366,7 +382,10 @@ impl Service<Request<Body>> for ProxySvc {
                         }
                     }
 
-                    Ok(Response::from_parts(resp_parts, resp_body))
+                    Ok(Response::from_parts(
+                        resp_parts,
+                        resp_body.map_err(Into::into).boxed_unsync(),
+                    ))
                 }
                 Ok(Err(e)) => Ok(json_error_response(
                     http::StatusCode::BAD_GATEWAY,
@@ -380,28 +399,6 @@ impl Service<Request<Body>> for ProxySvc {
                 )),
             }
         })
-    }
-}
-
-/// Service factory for creating ProxySvc instances.
-struct MakeSvc {
-    client: ProxyClient,
-    config: Arc<ProxyConfig>,
-}
-
-impl<T> Service<T> for MakeSvc {
-    type Response = ProxySvc;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, _: T) -> Self::Future {
-        let client = self.client.clone();
-        let config = self.config.clone();
-        Box::pin(async move { Ok(ProxySvc { client, config }) })
     }
 }
 
@@ -481,7 +478,7 @@ pub async fn run(
 
     let addr: SocketAddr = config.listen_addr;
     let client = ProxyClient::new(config.clone());
-    let make_svc = MakeSvc {
+    let svc = ProxySvc {
         client,
         config: config.clone(),
     };
@@ -508,30 +505,29 @@ pub async fn run(
         );
     }
 
-    let server = Server::bind(&addr).serve(make_svc);
+    let listener = bind(addr).await;
 
     // Handle graceful shutdown
-    let graceful = server.with_graceful_shutdown(async {
+    serve(listener, None, svc, async {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to install CTRL+C signal handler");
         cli_stdout_printline!("Shutdown signal received, stopping server...");
-    });
-
-    if let Err(e) = graceful.await {
-        cli_stderr_printline!("Server error: {}", e);
-        std::process::exit(1);
-    }
+    })
+    .await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hyper::body::to_bytes;
+    use http_body_util::Empty;
+    use hyper::body::Incoming;
+    use hyper::service::service_fn;
+    use tokio::net::TcpListener;
 
     /// Helper to extract body as string from response
-    async fn body_to_string(response: Response<Body>) -> String {
-        let bytes = to_bytes(response.into_body()).await.unwrap();
+    async fn body_to_string(response: Response<ProxyBody>) -> String {
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
         String::from_utf8(bytes.to_vec()).unwrap()
     }
 
@@ -635,27 +631,38 @@ mod tests {
     // Excluded paths (health checks) behaviour with a real backend
     // -------------------------------------------------------------------------
 
-    use hyper::service::{make_service_fn, service_fn};
-    use std::convert::Infallible;
+    /// Spawn a backend answering every request with `handler`, return its port.
+    async fn spawn_server<F, Fut>(handler: F) -> u16
+    where
+        F: Fn(Request<Incoming>) -> Fut + Clone + Send + 'static,
+        Fut: Future<Output = Result<Response<Full<Bytes>>, Infallible>> + Send + 'static,
+    {
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(serve(
+            listener,
+            None,
+            service_fn(handler),
+            std::future::pending(),
+        ));
+        port
+    }
 
     /// Spawn a tiny backend that answers 200 with the request path as body.
     /// It also sets a forged `Otoroshi-State-Resp` header: the proxy must never let it through
     /// on bypassed requests, and must overwrite it when it answers a challenge.
     async fn spawn_backend() -> u16 {
-        let make = make_service_fn(|_| async {
-            Ok::<_, Infallible>(service_fn(|req: Request<Body>| async move {
-                let body = format!("backend:{}:{}", req.method(), req.uri().path());
-                let resp = Response::builder()
-                    .header("Otoroshi-State-Resp", "forged-by-backend")
-                    .body(Body::from(body))
-                    .unwrap();
-                Ok::<_, Infallible>(resp)
-            }))
-        });
-        let server = Server::bind(&SocketAddr::from(([127, 0, 0, 1], 0))).serve(make);
-        let port = server.local_addr().port();
-        tokio::spawn(server);
-        port
+        spawn_server(|req: Request<Incoming>| async move {
+            let body = format!("backend:{}:{}", req.method(), req.uri().path());
+            let resp = Response::builder()
+                .header("Otoroshi-State-Resp", "forged-by-backend")
+                .body(Full::from(body))
+                .unwrap();
+            Ok::<_, Infallible>(resp)
+        })
+        .await
     }
 
     struct TestConfigOpts {
@@ -723,11 +730,11 @@ mod tests {
         }
     }
 
-    fn request(method: &str, uri: &str) -> Request<Body> {
+    fn request(method: &str, uri: &str) -> Request<Empty<Bytes>> {
         Request::builder()
             .method(method)
             .uri(uri)
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap()
     }
 
@@ -735,7 +742,7 @@ mod tests {
     async fn test_excluded_path_bypasses_challenge() {
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &["/health"]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         let response = service.call(request("GET", "/health")).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::OK);
@@ -753,7 +760,7 @@ mod tests {
             use_v1: true,
             ..Default::default()
         };
-        let mut service = svc(test_config_with(backend_port, &["/health"], opts));
+        let service = svc(test_config_with(backend_port, &["/health"], opts));
 
         // No header: bypass
         let response = service.call(request("GET", "/health")).await.unwrap();
@@ -765,7 +772,7 @@ mod tests {
             .method("GET")
             .uri("/health")
             .header("Otoroshi-State", "abc")
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::OK);
@@ -786,14 +793,14 @@ mod tests {
             state_header: "X-My-State",
             ..Default::default()
         };
-        let mut service = svc(test_config_with(backend_port, &["/health"], opts));
+        let service = svc(test_config_with(backend_port, &["/health"], opts));
 
         // The default header name is irrelevant: still no custom header, so bypass
         let req = Request::builder()
             .method("GET")
             .uri("/health")
             .header("Otoroshi-State", "ignored")
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::OK);
@@ -803,7 +810,7 @@ mod tests {
             .method("GET")
             .uri("/health")
             .header("X-My-State", "not-a-jwt")
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
@@ -816,7 +823,7 @@ mod tests {
             consumer_info: true,
             ..Default::default()
         };
-        let mut service = svc(test_config_with(backend_port, &["/health"], opts));
+        let service = svc(test_config_with(backend_port, &["/health"], opts));
 
         // Bypassed request: strict consumer info does not apply
         let response = service.call(request("GET", "/health")).await.unwrap();
@@ -838,7 +845,7 @@ mod tests {
             consumer_info: true,
             ..Default::default()
         };
-        let mut service = svc(test_config_with(backend_port, &["/health"], opts));
+        let service = svc(test_config_with(backend_port, &["/health"], opts));
 
         // V1 state header present on the excluded path: no bypass, so the strict Consumer Info
         // check is the one rejecting the request.
@@ -846,7 +853,7 @@ mod tests {
             .method("GET")
             .uri("/health")
             .header("Otoroshi-State", "abc")
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
@@ -857,26 +864,21 @@ mod tests {
 
     /// Backend that reports every `x-consumer-info` header value it receives.
     async fn spawn_consumer_info_backend() -> u16 {
-        let make = make_service_fn(|_| async {
-            Ok::<_, Infallible>(service_fn(|req: Request<Body>| async move {
-                let values: Vec<String> = req
-                    .headers()
-                    .get_all("x-consumer-info")
-                    .iter()
-                    .map(|v| v.to_str().unwrap_or("?").to_string())
-                    .collect();
-                let body = if values.is_empty() {
-                    "x-consumer-info:absent".to_string()
-                } else {
-                    format!("x-consumer-info:{}", values.join("|"))
-                };
-                Ok::<_, Infallible>(Response::new(Body::from(body)))
-            }))
-        });
-        let server = Server::bind(&SocketAddr::from(([127, 0, 0, 1], 0))).serve(make);
-        let port = server.local_addr().port();
-        tokio::spawn(server);
-        port
+        spawn_server(|req: Request<Incoming>| async move {
+            let values: Vec<String> = req
+                .headers()
+                .get_all("x-consumer-info")
+                .iter()
+                .map(|v| v.to_str().unwrap_or("?").to_string())
+                .collect();
+            let body = if values.is_empty() {
+                "x-consumer-info:absent".to_string()
+            } else {
+                format!("x-consumer-info:{}", values.join("|"))
+            };
+            Ok::<_, Infallible>(Response::new(Full::from(body)))
+        })
+        .await
     }
 
     #[tokio::test]
@@ -890,7 +892,7 @@ mod tests {
             consumer_info_out_header: Some("X-Consumer-Info"),
             ..Default::default()
         };
-        let mut service = svc(test_config_with(backend_port, &[], opts));
+        let service = svc(test_config_with(backend_port, &[], opts));
 
         let claims = serde_json::json!({ "apikey": { "clientId": "abc" }, "exp": chrono::Utc::now().timestamp() + 60 });
         let ci_token = encode(
@@ -908,7 +910,7 @@ mod tests {
             .header("Otoroshi-State", "abc")
             .header("Otoroshi-Claims", ci_token)
             .header("X-Consumer-Info", "{\"forged\":true}")
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::OK);
@@ -926,34 +928,30 @@ mod tests {
     #[tokio::test]
     async fn test_client_supplied_consumer_info_out_header_is_never_forwarded() {
         // Backend echoes the presence of the output header in its body
-        let make = make_service_fn(|_| async {
-            Ok::<_, Infallible>(service_fn(|req: Request<Body>| async move {
-                let body = format!(
-                    "x-consumer-info:{}",
-                    req.headers()
-                        .get("x-consumer-info")
-                        .map(|v| v.to_str().unwrap_or("?"))
-                        .unwrap_or("absent")
-                );
-                Ok::<_, Infallible>(Response::new(Body::from(body)))
-            }))
-        });
-        let server = Server::bind(&SocketAddr::from(([127, 0, 0, 1], 0))).serve(make);
-        let backend_port = server.local_addr().port();
-        tokio::spawn(server);
+        let backend_port = spawn_server(|req: Request<Incoming>| async move {
+            let body = format!(
+                "x-consumer-info:{}",
+                req.headers()
+                    .get("x-consumer-info")
+                    .map(|v| v.to_str().unwrap_or("?"))
+                    .unwrap_or("absent")
+            );
+            Ok::<_, Infallible>(Response::new(Full::from(body)))
+        })
+        .await;
 
         let opts = TestConfigOpts {
             consumer_info: true,
             consumer_info_out_header: Some("X-Consumer-Info"),
             ..Default::default()
         };
-        let mut service = svc(test_config_with(backend_port, &["/health"], opts));
+        let service = svc(test_config_with(backend_port, &["/health"], opts));
 
         let req = Request::builder()
             .method("GET")
             .uri("/health")
             .header("X-Consumer-Info", "{\"forged\":true}")
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::OK);
@@ -964,7 +962,7 @@ mod tests {
     async fn test_excluded_path_with_non_utf8_state_header_is_rejected() {
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &["/health"]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         // Header present but not valid UTF-8: must count as present, hence no bypass
         let req = Request::builder()
@@ -974,7 +972,7 @@ mod tests {
                 "Otoroshi-State",
                 http::header::HeaderValue::from_bytes(&[0xff, 0xfe]).unwrap(),
             )
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
@@ -984,7 +982,7 @@ mod tests {
     async fn test_excluded_path_with_query_and_head_bypasses_challenge() {
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &["/health"]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         let response = service
             .call(request("HEAD", "/health?probe=1"))
@@ -997,7 +995,7 @@ mod tests {
     async fn test_non_excluded_path_still_requires_challenge() {
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &["/health"]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         let response = service.call(request("GET", "/api")).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
@@ -1010,7 +1008,7 @@ mod tests {
     async fn test_excluded_path_with_post_still_requires_challenge() {
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &["/health"]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         let response = service.call(request("POST", "/health")).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
@@ -1020,7 +1018,7 @@ mod tests {
     async fn test_no_excluded_paths_requires_challenge_everywhere() {
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &[]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         let response = service.call(request("GET", "/health")).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
@@ -1030,14 +1028,14 @@ mod tests {
     async fn test_excluded_path_with_invalid_token_is_rejected() {
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &["/health"]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         // A state header on an excluded path triggers the normal verification
         let req = Request::builder()
             .method("GET")
             .uri("/health")
             .header("Otoroshi-State", "not-a-jwt")
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
@@ -1053,7 +1051,7 @@ mod tests {
 
         let backend_port = spawn_backend().await;
         let config = test_config(backend_port, &["/health"]);
-        let mut service = svc(config);
+        let service = svc(config);
 
         #[derive(Serialize)]
         struct Challenge {
@@ -1079,7 +1077,7 @@ mod tests {
             .method("GET")
             .uri("/health")
             .header("Otoroshi-State", token)
-            .body(Body::empty())
+            .body(Empty::<Bytes>::new())
             .unwrap();
         let response = service.call(req).await.unwrap();
         assert_eq!(response.status(), http::StatusCode::OK);

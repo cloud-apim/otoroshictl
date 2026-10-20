@@ -123,7 +123,7 @@ impl TcpTunnel {
                     Ok(0) => break,
                     Ok(n) => {
                         if ws_write
-                            .send(Message::Binary(buf[..n].to_vec()))
+                            .send(Message::Binary(buf[..n].to_vec().into()))
                             .await
                             .is_err()
                         {

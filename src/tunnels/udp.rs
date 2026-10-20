@@ -139,7 +139,7 @@ impl UdpTunnel {
                             }
                         };
                         let mut ws = ws_write_udp.lock().await;
-                        if ws.send(Message::Binary(bytes)).await.is_err() {
+                        if ws.send(Message::Binary(bytes.into())).await.is_err() {
                             break;
                         }
                     }

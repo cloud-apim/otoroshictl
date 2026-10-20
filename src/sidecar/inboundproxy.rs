@@ -1,38 +1,39 @@
 use futures_util::Future;
 use http::Response;
-use hyper::client::{HttpConnector, ResponseFuture};
-use hyper::server::conn::AddrIncoming;
+use hyper::Request;
+use hyper::body::Incoming;
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Server};
-use hyper_rustls::TlsAcceptor;
+use hyper_util::client::legacy::ResponseFuture;
+use rustls::server::WebPkiClientVerifier;
+use tokio_rustls::TlsAcceptor;
 
-use super::cache::{OtoroshiChallengePlugin, SidecarCache};
+use super::cache::{OtoroshiCertificate, OtoroshiChallengePlugin, SidecarCache};
 use super::config::OtoroshiSidecarConfig;
 
+use crate::http_utils::client::{HttpClient, http_client};
+use crate::http_utils::server::{bind, serve};
 use crate::otoroshi::protocol::OtoroshiProtocol;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 #[derive(Clone, Debug)]
 struct InboundProxyClient {
     config: OtoroshiSidecarConfig,
-    http_client: Client<HttpConnector>,
+    http_client: HttpClient<Incoming>,
 }
 
 impl InboundProxyClient {
     fn new(config: OtoroshiSidecarConfig) -> InboundProxyClient {
-        let http_client = Client::new();
+        let http_client = http_client();
         InboundProxyClient {
             config,
             http_client,
         }
     }
 
-    fn request(&self, mut req: Request<Body>) -> ResponseFuture {
+    fn request(&self, mut req: Request<Incoming>) -> ResponseFuture {
         let uri_string = format!(
             "{}://{}:{}{}",
             "http",
@@ -60,26 +61,28 @@ impl InboundProxy {
     pub fn start_http(
         config: OtoroshiSidecarConfig,
         cache: Arc<SidecarCache>,
-    ) -> impl Future<Output = std::result::Result<(), hyper::Error>> {
+    ) -> impl Future<Output = ()> {
         let in_addr: SocketAddr = SocketAddr::new(
             "0.0.0.0".parse().unwrap(),
             config.spec.inbound.port.unwrap_or(15000),
         );
         let client = InboundProxyClient::new(config.clone());
-        let make_svc = MakeSvc {
+        let svc = Svc {
             client,
             config,
             cache,
         };
-        let server = Server::bind(&in_addr).serve(make_svc);
-        info!(target: "inbound_proxy", "listening on http://{}", in_addr);
-        server
+        async move {
+            let listener = bind(in_addr).await;
+            info!(target: "inbound_proxy", "listening on http://{}", in_addr);
+            serve(listener, None, svc, std::future::pending()).await
+        }
     }
 
     pub fn start_https(
         config: OtoroshiSidecarConfig,
         cache: Arc<SidecarCache>,
-    ) -> impl Future<Output = std::result::Result<(), hyper::Error>> {
+    ) -> impl Future<Output = ()> {
         let in_addr: SocketAddr = SocketAddr::new(
             "0.0.0.0".parse().unwrap(),
             config.spec.inbound.port.unwrap_or(15000),
@@ -100,14 +103,12 @@ impl InboundProxy {
             .map(|i| i.cert_id)
             .unwrap_or("none".to_string());
         let certificate = cache.wait_and_get_cert_by_id(cert_id.clone(), 30);
-        let make_svc = MakeSvc {
+        let svc = Svc {
             client,
             config: config.clone(),
             cache: cache.clone(),
         };
-        if mtls {
-            let incoming = AddrIncoming::bind(&in_addr).unwrap();
-            let mut root = rustls::RootCertStore::empty();
+        let client_ca = if mtls {
             let ca_id = config
                 .clone()
                 .spec
@@ -115,47 +116,50 @@ impl InboundProxy {
                 .mtls
                 .map(|i| i.ca_cert_id)
                 .unwrap_or("none".to_string());
-            let ca = cache.wait_and_get_cert_by_id(ca_id.clone(), 30);
-            for cert in ca.certs().into_iter() {
-                let _ = root.add(&cert);
-            }
-            let client_auth = Arc::new(rustls::server::AllowAnyAuthenticatedClient::new(root));
-            let server_config = rustls::ServerConfig::builder()
-                .with_safe_default_cipher_suites()
-                .with_safe_default_kx_groups()
-                .with_protocol_versions(&[&rustls::version::TLS12, &rustls::version::TLS13])
-                .unwrap()
-                .with_client_cert_verifier(client_auth)
-                .with_single_cert(certificate.certs(), certificate.key())
-                .unwrap();
-            let acceptor = TlsAcceptor::builder()
-                .with_tls_config(server_config)
-                .with_alpn_protocols(vec![b"h2".to_vec(), b"http/1.1".to_vec()])
-                .with_incoming(incoming);
-            let server = Server::builder(acceptor).serve(make_svc);
-            info!(target: "inbound_proxy", "listening on https://{} with mTLS", in_addr);
-            server
+            Some(cache.wait_and_get_cert_by_id(ca_id, 30))
         } else {
-            let incoming = AddrIncoming::bind(&in_addr).unwrap();
-            let server_config = rustls::ServerConfig::builder()
-                .with_safe_default_cipher_suites()
-                .with_safe_default_kx_groups()
-                .with_protocol_versions(&[&rustls::version::TLS12, &rustls::version::TLS13])
-                .unwrap()
-                .with_no_client_auth()
-                .with_single_cert(certificate.certs(), certificate.key())
-                .unwrap();
-            let acceptor = TlsAcceptor::builder()
-                .with_tls_config(server_config)
-                .with_alpn_protocols(vec![b"h2".to_vec(), b"http/1.1".to_vec()])
-                .with_incoming(incoming);
-            let server = Server::builder(acceptor).serve(make_svc);
-            info!(target: "inbound_proxy", "listening on https://{}", in_addr);
-            server
+            None
+        };
+        let server_config = tls_config(&certificate, client_ca.as_ref());
+        let acceptor = TlsAcceptor::from(Arc::new(server_config));
+        async move {
+            let listener = bind(in_addr).await;
+            if mtls {
+                info!(target: "inbound_proxy", "listening on https://{} with mTLS", in_addr);
+            } else {
+                info!(target: "inbound_proxy", "listening on https://{}", in_addr);
+            }
+            serve(listener, Some(acceptor), svc, std::future::pending()).await
         }
     }
 }
 
+/// TLS settings of the inbound proxy. When `client_ca` is set, clients must
+/// present a certificate signed by it (mTLS).
+fn tls_config(
+    certificate: &OtoroshiCertificate,
+    client_ca: Option<&OtoroshiCertificate>,
+) -> rustls::ServerConfig {
+    let builder = rustls::ServerConfig::builder();
+    let builder = match client_ca {
+        Some(ca) => {
+            let mut roots = rustls::RootCertStore::empty();
+            roots.add_parsable_certificates(ca.certs());
+            let client_auth = WebPkiClientVerifier::builder(Arc::new(roots))
+                .build()
+                .unwrap_or_else(|e| panic!("invalid mTLS CA certificate '{}': {}", ca.id, e));
+            builder.with_client_cert_verifier(client_auth)
+        }
+        None => builder.with_no_client_auth(),
+    };
+    let mut server_config = builder
+        .with_single_cert(certificate.certs(), certificate.key())
+        .unwrap();
+    server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    server_config
+}
+
+#[derive(Clone)]
 struct Svc {
     client: InboundProxyClient,
     config: OtoroshiSidecarConfig,
@@ -295,16 +299,12 @@ impl Svc {
     }
 }
 
-impl Service<Request<Body>> for Svc {
-    type Response = Response<Body>;
-    type Error = hyper::Error;
+impl Service<Request<Incoming>> for Svc {
+    type Response = Response<Incoming>;
+    type Error = hyper_util::client::legacy::Error;
     type Future = ResponseFuture;
 
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+    fn call(&self, mut req: Request<Incoming>) -> Self::Future {
         let mut headers = req.headers().clone();
         let default_value = http::HeaderValue::from_str("localhost").unwrap();
         let authority_value = http::HeaderValue::from_str(
@@ -333,32 +333,199 @@ impl Service<Request<Body>> for Svc {
     }
 }
 
-struct MakeSvc {
-    client: InboundProxyClient,
-    config: OtoroshiSidecarConfig,
-    cache: Arc<SidecarCache>,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::http_utils::client::{HttpsClient, RequestBody, error_chain};
+    use http_body_util::Full;
+    use hyper::body::Bytes;
+    use hyper::service::service_fn;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+    use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, IsCa, KeyPair};
+    use rustls::pki_types::ServerName;
+    use std::convert::Infallible;
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpStream;
+    use tokio_rustls::TlsConnector;
 
-impl<T> Service<T> for MakeSvc {
-    type Response = Svc;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+    /// A CA and a leaf certificate for `localhost` signed by it.
+    struct TestPki {
+        ca: OtoroshiCertificate,
+        leaf: OtoroshiCertificate,
     }
 
-    fn call(&mut self, _: T) -> Self::Future {
-        let client = self.client.clone();
-        let config = self.config.clone();
-        let cache = self.cache.clone();
-        let future = async move {
-            Ok(Svc {
-                client,
-                config,
-                cache,
-            })
+    fn otoroshi_certificate(id: &str, chain: String, key: &KeyPair) -> OtoroshiCertificate {
+        OtoroshiCertificate {
+            id: id.to_string(),
+            name: id.to_string(),
+            chain,
+            privateKey: key.serialize_pem(),
+            subject: id.to_string(),
+        }
+    }
+
+    fn test_pki() -> TestPki {
+        let ca_key = KeyPair::generate().unwrap();
+        let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+        ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        let ca_cert_pem = ca_params.self_signed(&ca_key).unwrap().pem();
+        let ca = otoroshi_certificate("test-ca", ca_cert_pem, &ca_key);
+        let issuer = CertifiedIssuer::self_signed(ca_params, ca_key).unwrap();
+
+        let leaf_key = KeyPair::generate().unwrap();
+        let leaf_params = CertificateParams::new(vec!["localhost".to_string()]).unwrap();
+        let leaf_cert = leaf_params.signed_by(&leaf_key, &issuer).unwrap();
+        let leaf = otoroshi_certificate("test-leaf", leaf_cert.pem(), &leaf_key);
+        TestPki { ca, leaf }
+    }
+
+    /// Serve `tls_config(server, client_ca)` on a random port, answering "ok" to everything.
+    async fn spawn_tls_server(
+        server: &OtoroshiCertificate,
+        client_ca: Option<&OtoroshiCertificate>,
+    ) -> u16 {
+        let acceptor = TlsAcceptor::from(Arc::new(tls_config(server, client_ca)));
+        let listener = bind(SocketAddr::from(([127, 0, 0, 1], 0))).await;
+        let port = listener.local_addr().unwrap().port();
+        let svc = service_fn(|_req: Request<Incoming>| async {
+            Ok::<_, Infallible>(Response::new(Full::new(Bytes::from_static(b"ok"))))
+        });
+        tokio::spawn(serve(listener, Some(acceptor), svc, std::future::pending()));
+        port
+    }
+
+    fn client_config(
+        ca: &OtoroshiCertificate,
+        client_cert: Option<&OtoroshiCertificate>,
+    ) -> rustls::ClientConfig {
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add_parsable_certificates(ca.certs());
+        let builder = rustls::ClientConfig::builder().with_root_certificates(roots);
+        match client_cert {
+            Some(cert) => builder
+                .with_client_auth_cert(cert.certs(), cert.key())
+                .unwrap(),
+            None => builder.with_no_client_auth(),
+        }
+    }
+
+    fn https_client(config: rustls::ClientConfig) -> HttpsClient {
+        let https = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_tls_config(config)
+            .https_only()
+            .enable_http1()
+            .build();
+        Client::builder(TokioExecutor::new()).build(https)
+    }
+
+    async fn get(client: &HttpsClient, port: u16) -> Result<u16, String> {
+        let req = Request::get(format!("https://localhost:{}/", port))
+            .body(RequestBody::default())
+            .unwrap();
+        let resp = client.request(req).await.map_err(|e| error_chain(&e))?;
+        let status = resp.status().as_u16();
+        crate::http_utils::client::read_body(resp)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(status)
+    }
+
+    #[test]
+    fn test_certificate_pem_parsing() {
+        let pki = test_pki();
+        assert_eq!(pki.leaf.certs().len(), 1);
+        let chain = OtoroshiCertificate {
+            chain: format!("{}\n\n{}", pki.leaf.chain, pki.ca.chain),
+            ..pki.leaf.clone()
         };
-        Box::pin(future)
+        assert_eq!(chain.certs().len(), 2);
+        assert!(matches!(
+            chain.key(),
+            rustls::pki_types::PrivateKeyDer::Pkcs8(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_tls_server_accepts_trusting_client() {
+        let pki = test_pki();
+        let port = spawn_tls_server(&pki.leaf, None).await;
+        let client = https_client(client_config(&pki.ca, None));
+        assert_eq!(get(&client, port).await, Ok(200));
+    }
+
+    #[tokio::test]
+    async fn test_tls_server_negotiates_h2_through_alpn() {
+        let pki = test_pki();
+        let port = spawn_tls_server(&pki.leaf, None).await;
+        let mut config = client_config(&pki.ca, None);
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let tls = TlsConnector::from(Arc::new(config))
+            .connect(ServerName::try_from("localhost").unwrap(), stream)
+            .await
+            .unwrap();
+        assert_eq!(tls.get_ref().1.alpn_protocol(), Some(&b"h2"[..]));
+    }
+
+    #[tokio::test]
+    async fn test_untrusted_server_error_reports_the_tls_cause() {
+        let pki = test_pki();
+        let other = test_pki();
+        let port = spawn_tls_server(&pki.leaf, None).await;
+        let client = https_client(client_config(&other.ca, None));
+        let err = get(&client, port).await.unwrap_err();
+        assert!(err.contains("invalid peer certificate"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn test_mtls_server_rejects_client_without_certificate() {
+        let pki = test_pki();
+        let port = spawn_tls_server(&pki.leaf, Some(&pki.ca)).await;
+        let client = https_client(client_config(&pki.ca, None));
+        assert!(get(&client, port).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mtls_server_rejects_certificate_from_another_ca() {
+        let pki = test_pki();
+        let other = test_pki();
+        let port = spawn_tls_server(&pki.leaf, Some(&pki.ca)).await;
+        let client = https_client(client_config(&pki.ca, Some(&other.leaf)));
+        assert!(get(&client, port).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mtls_server_accepts_certificate_signed_by_its_ca() {
+        let pki = test_pki();
+        let port = spawn_tls_server(&pki.leaf, Some(&pki.ca)).await;
+        let client = https_client(client_config(&pki.ca, Some(&pki.leaf)));
+        assert_eq!(get(&client, port).await, Ok(200));
+    }
+
+    #[tokio::test]
+    async fn test_failed_handshake_does_not_stop_the_server() {
+        let pki = test_pki();
+        let port = spawn_tls_server(&pki.leaf, None).await;
+        let mut garbage = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        garbage
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        drop(garbage);
+        let client = https_client(client_config(&pki.ca, None));
+        assert_eq!(get(&client, port).await, Ok(200));
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid mTLS CA certificate 'empty-ca'")]
+    fn test_mtls_without_valid_ca_fails_fast() {
+        let pki = test_pki();
+        let empty_ca = OtoroshiCertificate {
+            id: "empty-ca".to_string(),
+            chain: String::new(),
+            ..pki.ca.clone()
+        };
+        tls_config(&pki.leaf, Some(&empty_ca));
     }
 }
