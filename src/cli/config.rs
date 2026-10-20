@@ -42,10 +42,22 @@ pub struct OtoroshiCtlConfigSpecCluster {
     pub routing_ip_addresses: Option<Vec<String>>,
 }
 
+/// The session of Cloud APIM: a personal token of its public api (`otoroshictl cloud-apim login`). The apikey of the
+/// previous console (`client_id`, `client_secret`) is still read, to ask for a new login.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct OtoroshiCtlConfigCloudApim {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub client_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub client_secret: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub org_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

@@ -223,6 +223,17 @@ impl ConfigCommand {
             }
         };
 
+        Self::import_context_from_string(content, overwrite, change_current, name, cli_opts).await;
+    }
+
+    /// A configuration given as text (by Cloud APIM, for instance) imported as `import_context` does.
+    pub async fn import_context_from_string(
+        content: String,
+        overwrite: &bool,
+        change_current: &bool,
+        name: &Option<String>,
+        cli_opts: CliOpts,
+    ) {
         let imported_config = OtoroshiCtlConfig::read_from_string(&content).unwrap();
         match name {
             Some(name) => {

@@ -1,12 +1,6 @@
-use std::collections::HashMap;
-
-use async_recursion::async_recursion;
-use chrono::prelude::*;
 use cli_table::{Cell, Style, Table, print_stdout};
 use http::Method;
 use http::Request;
-use rand::RngExt;
-use rand::distr::Alphanumeric;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -16,536 +10,430 @@ use crate::cli_stderr_printline;
 use crate::cli_stdout_printline;
 use crate::http_utils::client::{RequestBody, error_chain, native_roots_client, read_body};
 
+/// The public API of Cloud APIM, served by its console, overridable with `CLOUD_APIM_API_URL` (a console in
+/// development, for instance).
+const DEFAULT_API_URL: &str = "https://console-next.cloud-apim.com";
+const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct CloudApimNamed {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+/// A managed Otoroshi instance, as `GET /v1/managed` lists it.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CloudApimDeployments {
-    #[serde(flatten)]
-    pub items: Vec<CloudApimDeployment>,
+pub struct CloudApimInstance {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    #[serde(default)]
+    pub region: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub plan: Option<CloudApimNamed>,
+    pub org: CloudApimNamed,
+    #[serde(default, rename = "createdAt")]
+    pub created_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CloudApimDeployment {
-    pub name: String,
-    pub uid: String,
-    pub region: String,
-    pub version: String,
-    pub kind: String,
-    pub status: String,
-    pub created_at: String,
-    pub plan: String,
-    pub link: String,
+struct CloudApimInstances {
+    instances: Vec<CloudApimInstance>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+struct DeviceAuthorization {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    verification_uri_complete: Option<String>,
+    expires_in: u64,
+    interval: u64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+struct DeviceToken {
+    access_token: String,
+    email: Option<String>,
+    org_id: Option<String>,
+    scope: Option<String>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+struct ApiError {
+    error: String,
+    error_description: Option<String>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+struct OtoroshictlConfigResponse {
+    config: String,
 }
 
 pub struct CloudApimResponse {
     pub status: u16,
     pub body_bytes: hyper::body::Bytes,
-    pub headers: HashMap<String, String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct CloudApimToken {
-    pub access_token: String,
-    pub token_type: String,
-    pub expires_in: i32,
-    pub created_at: Option<String>,
+// a value of a form: what is not unreserved, percent-encoded
+fn form_value(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{:02X}", b),
+        })
+        .collect()
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CloudApimLoginResponse {
-    pub client_id: String,
-    pub client_secret: String,
-}
-
-impl CloudApimToken {
-    pub fn read_from_disk() -> Option<CloudApimToken> {
-        confy::load("io.otoroshi.otoroshictl", Some("cloud_apim_token")).ok()
-    }
-    pub fn write_to_disk(cfg: CloudApimToken) {
-        confy::store("io.otoroshi.otoroshictl", Some("cloud_apim_token"), cfg).unwrap();
-    }
-    pub fn delete_from_disk() {
-        let path =
-            confy::get_configuration_file_path("io.otoroshi.otoroshictl", Some("cloud_apim_token"))
-                .unwrap();
-        let _ = std::fs::remove_file(path);
-    }
-}
 pub struct CloudApimCommands {}
 
 impl CloudApimCommands {
-    async fn unauth_cloud_apim_call(
-        method: hyper::Method,
-        path: &str,
-        accept: Option<String>,
-        body: Option<RequestBody>,
-        content_type: Option<String>,
+    fn api_url(config: Option<&OtoroshiCtlConfigCloudApim>) -> String {
+        std::env::var("CLOUD_APIM_API_URL")
+            .ok()
+            .or_else(|| config.and_then(|c| c.api_url.clone()))
+            .unwrap_or(DEFAULT_API_URL.to_string())
+            .trim_end_matches('/')
+            .to_string()
+    }
+
+    /// A call of the public api: `body` is its content type and its content.
+    async fn call(
+        method: Method,
+        url: String,
+        token: Option<&str>,
+        body: Option<(&str, String)>,
     ) -> CloudApimResponse {
-        let scheme = "https";
-        let host = "cli.cloud-apim.com";
-        let uri: String = format!("{}://{}{}", scheme, host, path);
-        // debug!("calling {} {}", method, uri);
         let mut builder = Request::builder()
-            .method(method.clone())
-            .uri(uri)
-            .header("host", host)
-            .header(
-                "accept",
-                accept.clone().unwrap_or("application/json".to_string()),
-            );
-        if body.is_some() && content_type.is_some() {
-            // builder = builder.header("Content-Type", "application/json")
-            builder = builder.header("Content-Type", content_type.clone().unwrap());
+            .method(method)
+            .uri(url)
+            .header("accept", "application/json");
+        if let Some(token) = token {
+            builder = builder.header("Authorization", format!("Bearer {}", token));
         }
-        let req: Request<RequestBody> = builder.body(body.unwrap_or_default()).unwrap();
-        let resp_result = native_roots_client().request(req).await;
-        match resp_result {
+        let req: Request<RequestBody> = match body {
+            Some((content_type, content)) => builder
+                .header("Content-Type", content_type)
+                .body(RequestBody::from(content))
+                .unwrap(),
+            None => builder.body(RequestBody::default()).unwrap(),
+        };
+        match native_roots_client().request(req).await {
             Err(err) => {
                 cli_stderr_printline!(
-                    "error while calling cloud-apim api: \n\n{}",
+                    "error while calling the cloud-apim api: \n\n{}",
                     error_chain(&err)
                 );
                 std::process::exit(-1)
             }
             Ok(resp) => {
                 let status = resp.status().as_u16();
-                let mut headers = HashMap::new();
-                for header in resp.headers().into_iter() {
-                    headers.insert(
-                        header.0.as_str().to_string(),
-                        header.1.to_str().unwrap().to_string(),
-                    );
-                }
                 let body_bytes = read_body(resp).await.unwrap();
-                // debug!("status: {}, body: {:?}", status, body_bytes);
-                CloudApimResponse {
-                    status,
-                    headers,
-                    body_bytes,
-                }
+                CloudApimResponse { status, body_bytes }
             }
         }
     }
 
-    #[async_recursion]
-    async fn cloud_apim_call(
-        method: hyper::Method,
-        path: &str,
-        accept: Option<String>,
-        body: Option<RequestBody>,
-        content_type: Option<String>,
-        config: OtoroshiCtlConfigCloudApim,
-        token: CloudApimToken,
-    ) -> CloudApimResponse {
-        let scheme = "https";
-        let host = "cli.cloud-apim.com";
-        let uri: String = format!("{}://{}{}", scheme, host, path);
-        // debug!("calling {} {}", method, uri);
-        let mut builder = Request::builder()
-            .method(method.clone())
-            .uri(uri)
-            .header("host", host)
-            .header(
-                "accept",
-                accept.clone().unwrap_or("application/json".to_string()),
-            )
-            .header("Authorization", format!("Bearer {}", token.access_token));
-        if body.is_some() && content_type.is_some() {
-            // builder = builder.header("Content-Type", "application/json")
-            builder = builder.header("Content-Type", content_type.clone().unwrap());
-        }
-        let req: Request<RequestBody> = builder.body(body.unwrap_or_default()).unwrap();
-        let resp_result = native_roots_client().request(req).await;
-        match resp_result {
-            Err(err) => {
+    /// The signed in session, or a message to sign in.
+    async fn session(cli_opts: CliOpts) -> OtoroshiCtlConfigCloudApim {
+        let config =
+            crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        match config.cloud_apim {
+            Some(session) if session.access_token.is_some() => session,
+            Some(_) => {
                 cli_stderr_printline!(
-                    "error while calling cloud-apim api: \n\n{}",
-                    error_chain(&err)
+                    "your cloud-apim session is from the previous console: sign in again with 'otoroshictl cloud-apim login'"
                 );
                 std::process::exit(-1)
             }
-            Ok(resp) => {
-                let status = resp.status().as_u16();
-                if status == 401 {
-                    let new_token = Self::get_token(config.clone()).await.unwrap();
-                    CloudApimToken::write_to_disk(new_token.clone());
-                    Self::cloud_apim_call(
-                        method.clone(),
-                        path,
-                        accept.clone(),
-                        None,
-                        content_type.clone(),
-                        config.clone(),
-                        new_token.clone(),
-                    )
-                    .await
-                } else {
-                    let mut headers = HashMap::new();
-                    for header in resp.headers().into_iter() {
-                        headers.insert(
-                            header.0.as_str().to_string(),
-                            header.1.to_str().unwrap().to_string(),
-                        );
-                    }
-                    let body_bytes = read_body(resp).await.unwrap();
-                    // debug!("status: {}, body: {:?}", status, body_bytes);
-                    CloudApimResponse {
-                        status,
-                        headers,
-                        body_bytes,
-                    }
-                }
+            None => {
+                cli_stderr_printline!(
+                    "no cloud-apim user found. try login first with 'otoroshictl cloud-apim login'"
+                );
+                std::process::exit(-1)
             }
         }
     }
 
-    async fn cloud_apim_call_with_token(
-        method: hyper::Method,
-        path: &str,
-        accept: Option<String>,
-        body: Option<RequestBody>,
-        content_type: Option<String>,
-        config: OtoroshiCtlConfigCloudApim,
-    ) -> CloudApimResponse {
-        match CloudApimToken::read_from_disk() {
-            Some(token) if !token.access_token.is_empty() => {
-                Self::cloud_apim_call(
-                    method,
-                    path,
-                    accept,
-                    body,
-                    content_type,
-                    config.clone(),
-                    token.clone(),
-                )
-                .await
+    /// A call with the token of the session; an error of the api is printed, and ends the command.
+    async fn authed(
+        session: &OtoroshiCtlConfigCloudApim,
+        method: Method,
+        path: String,
+        body: Option<(&str, String)>,
+    ) -> hyper::body::Bytes {
+        let url = format!("{}{}", Self::api_url(Some(session)), path);
+        let resp = Self::call(method, url, session.access_token.as_deref(), body).await;
+        match resp.status {
+            200 | 201 => resp.body_bytes,
+            401 => {
+                cli_stderr_printline!(
+                    "your cloud-apim session expired or was revoked: sign in again with 'otoroshictl cloud-apim login'"
+                );
+                std::process::exit(-1)
             }
-            _ => match Self::get_token(config.clone()).await {
-                None => CloudApimResponse {
-                    status: 400,
-                    body_bytes: hyper::body::Bytes::from("unable to get access_token"),
-                    headers: HashMap::new(),
-                },
-                Some(token) => {
-                    CloudApimToken::write_to_disk(token.clone());
-                    Self::cloud_apim_call(
-                        method,
-                        path,
-                        accept,
-                        body,
-                        content_type,
-                        config.clone(),
-                        token.clone(),
-                    )
-                    .await
-                }
-            },
-        }
-    }
-
-    async fn get_cloud_apim_resource(
-        path: &str,
-        accept: Option<String>,
-        config: OtoroshiCtlConfigCloudApim,
-    ) -> Option<hyper::body::Bytes> {
-        let response = Self::cloud_apim_call_with_token(
-            Method::GET,
-            path,
-            accept,
-            None,
-            Some("application/json".to_string()),
-            config,
-        )
-        .await;
-        if response.status == 200 || response.status == 201 {
-            Some(response.body_bytes)
-        } else {
-            println!(
-                "status: {}, body: {:?}",
-                response.status, response.body_bytes
-            );
-            None
-        }
-    }
-
-    async fn restart_deployment(
-        uid: String,
-        config: OtoroshiCtlConfigCloudApim,
-    ) -> Option<hyper::body::Bytes> {
-        let response = Self::cloud_apim_call_with_token(
-            Method::POST,
-            format!("/api/deployments/{}/_restart", uid).as_str(),
-            Some("application/json".to_string()),
-            Some(RequestBody::from("")),
-            Some("application/json".to_string()),
-            config,
-        )
-        .await;
-        if response.status == 200 || response.status == 201 {
-            Some(response.body_bytes)
-        } else {
-            println!(
-                "status: {}, body: {:?}",
-                response.status, response.body_bytes
-            );
-            None
-        }
-    }
-
-    async fn get_token(config: OtoroshiCtlConfigCloudApim) -> Option<CloudApimToken> {
-        debug!("refreshing access token");
-        let json = serde_json::json!({
-            "grant_type": "client_credentials",
-            "client_id": config.client_id,
-            "client_secret": config.client_secret,
-            "scope": [],
-            "bearer_kind": "jwt"
-        });
-        let body = serde_json::to_string(&json).unwrap();
-        let resp = Self::unauth_cloud_apim_call(
-            Method::POST,
-            "/oauth/token",
-            Some("application/json".to_string()),
-            Some(RequestBody::from(body)),
-            Some("application/json".to_string()),
-        )
-        .await;
-        if resp.status == 200 {
-            match serde_json::from_slice::<CloudApimToken>(&resp.body_bytes) {
-                Err(e) => {
-                    debug!("error while parsing token resp: {}", e);
-                    None
-                }
-                Ok(mut token) => {
-                    let dt = Local::now();
-                    let naive_utc = dt.naive_utc();
-                    let offset = *dt.offset();
-                    let date_time = DateTime::<Local>::from_naive_utc_and_offset(naive_utc, offset);
-                    let formatted = format!("{}", date_time.format("%Y-%m-%d %H:%M:%S"));
-                    token.created_at = Some(formatted);
-                    Some(token)
-                }
-            }
-        } else {
-            debug!("bad response status: {}", resp.status);
-            None
-        }
-    }
-
-    async fn get_deployements_list(config: OtoroshiCtlConfigCloudApim) -> Vec<CloudApimDeployment> {
-        match Self::get_cloud_apim_resource(
-            "/api/deployments",
-            Some("application/json".to_string()),
-            config.clone(),
-        )
-        .await
-        {
-            None => Vec::new(),
-            Some(body_bytes) => {
-                match serde_json::from_slice::<Vec<CloudApimDeployment>>(&body_bytes) {
-                    Ok(deployments) => deployments,
-                    Err(e) => {
-                        debug!("parse error: {}", e);
-                        Vec::new()
-                    }
-                }
+            status => {
+                let message = serde_json::from_slice::<ApiError>(&resp.body_bytes)
+                    .map(|e| e.error_description.unwrap_or(e.error))
+                    .unwrap_or_else(|_| String::from_utf8_lossy(&resp.body_bytes).to_string());
+                cli_stderr_printline!("cloud-apim answered {}: {}", status, message);
+                std::process::exit(-1)
             }
         }
     }
 
-    fn default_display(resources: Vec<CloudApimDeployment>) {
+    async fn instances(session: &OtoroshiCtlConfigCloudApim) -> Vec<CloudApimInstance> {
+        let body = Self::authed(session, Method::GET, "/v1/managed".to_string(), None).await;
+        match serde_json::from_slice::<CloudApimInstances>(&body) {
+            Ok(list) => list.instances,
+            Err(e) => {
+                debug!("parse error: {}", e);
+                Vec::new()
+            }
+        }
+    }
+
+    /// An instance by its name (or its id): two of the same name in two organisations need the id.
+    async fn instance(session: &OtoroshiCtlConfigCloudApim, name: &str) -> CloudApimInstance {
+        let found: Vec<CloudApimInstance> = Self::instances(session)
+            .await
+            .into_iter()
+            .filter(|i| i.name == name || i.id == name)
+            .collect();
+        match found.len() {
+            0 => {
+                cli_stderr_printline!("no cloud-apim managed instance found with name '{}'", name);
+                std::process::exit(-1)
+            }
+            1 => found.into_iter().next().unwrap(),
+            _ => {
+                cli_stderr_printline!(
+                    "several managed instances are named '{}' ({}): use the id of one instead",
+                    name,
+                    found
+                        .iter()
+                        .map(|i| format!("{} in {}", i.id, i.org.name))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                );
+                std::process::exit(-1)
+            }
+        }
+    }
+
+    fn default_display(resources: Vec<CloudApimInstance>) {
         let table = resources
             .into_iter()
             .map(|item| {
                 vec![
-                    //item.uid.cell(),
                     item.name.cell(),
-                    item.kind.cell(),
-                    item.version.cell(),
+                    item.org.name.cell(),
+                    item.version.unwrap_or("--".to_string()).cell(),
                     item.status.cell(),
-                    item.region.cell(),
-                    item.plan.cell(),
-                    item.created_at.cell(),
+                    item.region.unwrap_or("--".to_string()).cell(),
+                    item.plan.map(|p| p.name).unwrap_or("--".to_string()).cell(),
+                    item.created_at.unwrap_or("--".to_string()).cell(),
+                    item.id.cell(),
                 ]
             })
             .table()
             .title(vec![
-                //"uid".cell().bold(true),
                 "name".cell().bold(true),
-                "kind".cell().bold(true),
+                "organisation".cell().bold(true),
                 "version".cell().bold(true),
                 "status".cell().bold(true),
                 "region".cell().bold(true),
                 "plan".cell().bold(true),
                 "created_at".cell().bold(true),
+                "id".cell().bold(true),
             ]);
         let _ = print_stdout(table);
     }
 
     pub async fn display_deployments(cli_opts: CliOpts) {
-        let config =
-            crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.cloud_apim {
-            None => {
-                cli_stderr_printline!(
-                    "no cloud-apim user found. try login first with 'otoroshictl cloud-apim login'"
-                );
-                std::process::exit(0)
-            }
-            Some(config) => {
-                let deployments = Self::get_deployements_list(config).await;
-                match cli_opts.ouput {
-                    Some(str) => match str.as_str() {
-                        "json" => cli_stdout_printline!(
-                            "{}",
-                            serde_json::to_string(&deployments).unwrap()
-                        ),
-                        "json_pretty" => cli_stdout_printline!(
-                            "{}",
-                            serde_json::to_string_pretty(&deployments).unwrap()
-                        ),
-                        "yaml" => cli_stdout_printline!(
-                            "{}",
-                            serde_yaml::to_string(&deployments).unwrap()
-                        ),
-                        _ => Self::default_display(deployments),
-                    },
-                    _ => Self::default_display(deployments),
-                };
-            }
+        let session = Self::session(cli_opts.clone()).await;
+        let instances = Self::instances(&session).await;
+        match cli_opts.ouput {
+            Some(str) => match str.as_str() {
+                "json" => cli_stdout_printline!("{}", serde_json::to_string(&instances).unwrap()),
+                "json_pretty" => {
+                    cli_stdout_printline!("{}", serde_json::to_string_pretty(&instances).unwrap())
+                }
+                "yaml" => cli_stdout_printline!("{}", serde_yaml::to_string(&instances).unwrap()),
+                _ => Self::default_display(instances),
+            },
+            _ => Self::default_display(instances),
         };
     }
 
+    /// Signs out: the token is revoked on the console, then forgotten here.
     pub async fn logout(cli_opts: CliOpts) {
         let mut config =
             crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
+        if let Some(session) = config.cloud_apim.clone() {
+            if let Some(token) = session.access_token.as_deref() {
+                let url = format!("{}/v1/me/token", Self::api_url(Some(&session)));
+                let _ = Self::call(Method::DELETE, url, Some(token), None).await;
+            }
+        }
         config.cloud_apim = None;
         crate::cli::config::OtoroshiCtlConfig::write_current_config(config);
-        CloudApimToken::delete_from_disk();
-    }
-
-    pub async fn login(cli_opts: CliOpts) {
-        Self::logout(cli_opts.clone()).await;
-        let token: String = rand::rng()
-            .sample_iter(&Alphanumeric)
-            .take(32)
-            .map(char::from)
-            .collect();
-        let poll_path = format!("/api/cli_tokens?cli_token={}", token);
-        let console_url = format!(
-            "https://console.cloud-apim.com/console/cli/login?cli_token={}",
-            token
-        );
-        let mut count = 0;
-        loop {
-            if count == 1 {
-                cli_stdout_printline!(
-                    "Opening {} in a browser to login and link otoroshictl to your account",
-                    console_url
-                );
-                if let Err(e) = crate::utils::browser::open_url(&console_url) {
-                    cli_stderr_printline!("Warning: {}", e);
-                }
-            }
-            if count > 1 {
-                cli_stdout_printline!("Retrying to link account ...")
-            }
-            if count >= 20 {
-                cli_stderr_printline!(
-                    "No account link after 20 retries. Please retry 'otoroshictl cloud-apim login' again !"
-                );
-                std::process::exit(-1);
-            }
-            let mut config: crate::cli::config::OtoroshiCtlConfig =
-                crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-            let res = Self::unauth_cloud_apim_call(
-                Method::GET,
-                poll_path.as_str(),
-                Some("application/json".to_string()),
-                None,
-                None,
-            )
-            .await;
-            if res.status == 200 {
-                let response =
-                    serde_json::from_slice::<CloudApimLoginResponse>(&res.body_bytes).unwrap();
-                config.cloud_apim = Some(OtoroshiCtlConfigCloudApim {
-                    client_id: response.client_id,
-                    client_secret: response.client_secret,
-                });
-                crate::cli::config::OtoroshiCtlConfig::write_current_config(config);
-                break;
-            } else {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-            }
-            count += 1;
+        // the token file of the previous console, if any
+        if let Ok(path) =
+            confy::get_configuration_file_path("io.otoroshi.otoroshictl", Some("cloud_apim_token"))
+        {
+            let _ = std::fs::remove_file(path);
         }
     }
 
-    pub async fn link(cli_opts: CliOpts, name: String, change_current: bool) {
-        let overwrite: bool = false;
-        let config =
-            crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.cloud_apim {
-            None => {
-                cli_stderr_printline!(
-                    "no cloud-apim user found. try login first with 'otoroshictl cloud-apim login'"
-                );
-                std::process::exit(0)
+    /// Signs in with a device authorization (RFC 8628): a code shown here, approved in the console.
+    pub async fn login(cli_opts: CliOpts) {
+        Self::logout(cli_opts.clone()).await;
+        let api_url = Self::api_url(None);
+        let start = Self::call(
+            Method::POST,
+            format!("{}/v1/cli/device", api_url),
+            None,
+            Some((
+                "application/json",
+                serde_json::json!({ "clientName": "otoroshictl" }).to_string(),
+            )),
+        )
+        .await;
+        if start.status != 200 {
+            cli_stderr_printline!(
+                "unable to start the login: cloud-apim answered {}",
+                start.status
+            );
+            std::process::exit(-1)
+        }
+        let device: DeviceAuthorization = serde_json::from_slice(&start.body_bytes).unwrap();
+        let page = device
+            .verification_uri_complete
+            .clone()
+            .unwrap_or(device.verification_uri.clone());
+        cli_stdout_printline!(
+            "To sign in, approve the code {} in the console: {}",
+            device.user_code,
+            page
+        );
+        // (not on a machine without one: OTOROSHICTL_NO_BROWSER=1, the page is opened by hand)
+        if std::env::var("OTOROSHICTL_NO_BROWSER").is_err() {
+            if let Err(e) = crate::utils::browser::open_url(&page) {
+                cli_stderr_printline!("Warning: {}", e);
             }
-            Some(config) => {
-                let deployments = Self::get_deployements_list(config).await;
-                match deployments.into_iter().find(|i| i.name == name) {
-                    None => {
-                        cli_stderr_printline!(
-                            "no cloud-apim deployment found with name '{}'",
-                            name
-                        );
-                        std::process::exit(0)
-                    }
-                    Some(deployment) => {
-                        crate::commands::config::ConfigCommand::import_context(
-                            &Some(deployment.link),
-                            &overwrite,
-                            &change_current,
-                            &None,
-                            &false,
-                            cli_opts.clone(),
-                        )
+        }
+        let mut interval = device.interval.max(1);
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_secs(device.expires_in);
+        loop {
+            if std::time::Instant::now() > deadline {
+                cli_stderr_printline!("the code expired: run 'otoroshictl cloud-apim login' again");
+                std::process::exit(-1)
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
+            let form = format!(
+                "grant_type={}&device_code={}",
+                form_value(DEVICE_GRANT),
+                form_value(&device.device_code)
+            );
+            let resp = Self::call(
+                Method::POST,
+                format!("{}/v1/cli/token", api_url),
+                None,
+                Some(("application/x-www-form-urlencoded", form)),
+            )
+            .await;
+            if resp.status == 200 {
+                let token: DeviceToken = serde_json::from_slice(&resp.body_bytes).unwrap();
+                let mut config =
+                    crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone())
                         .await;
-                    }
+                config.cloud_apim = Some(OtoroshiCtlConfigCloudApim {
+                    access_token: Some(token.access_token),
+                    api_url: std::env::var("CLOUD_APIM_API_URL").ok(),
+                    email: token.email.clone(),
+                    org_id: token.org_id.clone(),
+                    ..Default::default()
+                });
+                crate::cli::config::OtoroshiCtlConfig::write_current_config(config);
+                cli_stdout_printline!(
+                    "Signed in as {} ({})",
+                    token.email.unwrap_or("you".to_string()),
+                    token.scope.unwrap_or_default()
+                );
+                break;
+            }
+            match serde_json::from_slice::<ApiError>(&resp.body_bytes) {
+                Ok(e) if e.error == "authorization_pending" => {}
+                Ok(e) if e.error == "slow_down" => interval += 5,
+                Ok(e) if e.error == "access_denied" => {
+                    cli_stderr_printline!("the login was refused in the console");
+                    std::process::exit(-1)
+                }
+                Ok(e) => {
+                    cli_stderr_printline!(
+                        "unable to sign in: {}",
+                        e.error_description.unwrap_or(e.error)
+                    );
+                    std::process::exit(-1)
+                }
+                Err(_) => {
+                    cli_stderr_printline!("unable to sign in: cloud-apim answered {}", resp.status);
+                    std::process::exit(-1)
                 }
             }
-        };
+        }
+    }
+
+    /// The configuration of otoroshictl for an instance, imported as a context (and made the current one for `use`).
+    pub async fn link(cli_opts: CliOpts, name: String, change_current: bool) {
+        let session = Self::session(cli_opts.clone()).await;
+        let instance = Self::instance(&session, &name).await;
+        let body = Self::authed(
+            &session,
+            Method::POST,
+            format!(
+                "/v1/orgs/{}/managed/{}/_otoroshictl",
+                instance.org.id, instance.id
+            ),
+            Some(("application/json", "{}".to_string())),
+        )
+        .await;
+        let response: OtoroshictlConfigResponse = serde_json::from_slice(&body).unwrap();
+        crate::commands::config::ConfigCommand::import_context_from_string(
+            response.config,
+            &false,
+            &change_current,
+            &None,
+            cli_opts.clone(),
+        )
+        .await;
     }
 
     pub async fn restart(cli_opts: CliOpts, name: String) {
-        let config =
-            crate::cli::config::OtoroshiCtlConfig::get_current_config(cli_opts.clone()).await;
-        match config.cloud_apim {
-            None => {
-                cli_stderr_printline!(
-                    "no cloud-apim user found. try login first with 'otoroshictl cloud-apim login'"
-                );
-                std::process::exit(0)
-            }
-            Some(config) => {
-                let deployments = Self::get_deployements_list(config.clone()).await;
-                match deployments.into_iter().find(|i| i.name == name) {
-                    None => {
-                        cli_stderr_printline!(
-                            "no cloud-apim deployment found with name '{}'",
-                            name
-                        );
-                        std::process::exit(0)
-                    }
-                    Some(deployment) => {
-                        Self::restart_deployment(deployment.uid, config.clone()).await;
-                        cli_stdout_printline!(
-                            "your deployment '{}' is restarting ...",
-                            deployment.name
-                        );
-                    }
-                }
-            }
-        };
+        let session = Self::session(cli_opts.clone()).await;
+        let instance = Self::instance(&session, &name).await;
+        Self::authed(
+            &session,
+            Method::POST,
+            format!(
+                "/v1/orgs/{}/managed/{}/_restart",
+                instance.org.id, instance.id
+            ),
+            Some(("application/json", "{}".to_string())),
+        )
+        .await;
+        cli_stdout_printline!(
+            "your managed instance '{}' is restarting ...",
+            instance.name
+        );
     }
 }
