@@ -10,8 +10,9 @@ use crate::cli_stderr_printline;
 use crate::cli_stdout_printline;
 use crate::http_utils::client::{RequestBody, error_chain, native_roots_client, read_body};
 
-/// The public API of Cloud APIM, overridable with `CLOUD_APIM_API_URL` (a console in development, for instance).
-const DEFAULT_API_URL: &str = "https://api.cloud-apim.com";
+/// The public API of Cloud APIM, served by its console, overridable with `CLOUD_APIM_API_URL` (a console in
+/// development, for instance).
+const DEFAULT_API_URL: &str = "https://console-next.cloud-apim.com";
 const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

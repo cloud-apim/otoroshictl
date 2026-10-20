@@ -10,11 +10,11 @@ you can link your [Cloud APIM](https://www.cloud-apim.com) account into your `ot
 
 <Terminal command="otoroshictl cloud-apim login" />
 
-`otoroshictl` shows a code and opens the console in a web browser: check that the console shows the same code, choose
-the organisation and what `otoroshictl` may do (read, act on the instances, read their secrets to link them), then
-approve. `otoroshictl` gets a personal token of the public API of Cloud APIM, valid 30 days, that you can revoke from
-your account in the console. On a machine without a browser, set `OTOROSHICTL_NO_BROWSER=1` and open the page it
-prints yourself.
+`otoroshictl` shows a code and opens the [console](https://console-next.cloud-apim.com) in a web browser: check that
+the console shows the same code, choose the organisation and what `otoroshictl` may do (read, act on the instances,
+read their secrets to link them), then approve. `otoroshictl` gets a personal token of the public API of Cloud APIM,
+valid 30 days, that you can revoke from your account in the console. On a machine without a browser, set
+`OTOROSHICTL_NO_BROWSER=1` and open the page it prints yourself.
 
 Once logged in, you can list the managed Otoroshi instances of your organisations
 
@@ -36,7 +36,7 @@ the same name)
 <Terminal command="otoroshictl cloud-apim link Production" />
 
 `otoroshictl cloud-apim logout` revokes the token and forgets it. `CLOUD_APIM_API_URL` points `otoroshictl` to another
-console (`https://api.cloud-apim.com` by default).
+console (`https://console-next.cloud-apim.com` by default).
 
 
 ## Cloud APIM subcommands
