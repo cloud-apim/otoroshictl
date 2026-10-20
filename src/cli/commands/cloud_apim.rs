@@ -5,7 +5,7 @@ use chrono::prelude::*;
 use cli_table::{Cell, Style, Table, print_stdout};
 use http::Method;
 use http::Request;
-use rand::Rng;
+use rand::RngExt;
 use rand::distr::Alphanumeric;
 use serde::Deserialize;
 use serde::Serialize;
