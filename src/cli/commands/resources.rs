@@ -188,6 +188,17 @@ impl ResourcesCommand {
         }
     }
 
+    fn kube_entity_name_or_exit(json: &serde_yaml::Value, id: &str) -> String {
+        EntityHelper::extract_yaml_kube_entity_name(json).unwrap_or_else(|| {
+            cli_stderr_printline!(
+                "entity '{}' of kind '{}' has no name: set 'metadata.name', or 'name' / 'clientName' in its spec",
+                id,
+                json.get("kind").and_then(|k| k.as_str()).unwrap_or("unknown")
+            );
+            std::process::exit(-1)
+        })
+    }
+
     async fn handle_yaml_kube_entity(
         json: serde_yaml::Value,
         exposed_resources: &OtoroshExposedResources,
@@ -195,12 +206,7 @@ impl ResourcesCommand {
     ) -> () {
         let spec = json.get("spec").unwrap();
         let id = EntityHelper::extract_yaml_entity_id(spec).unwrap();
-        let metadata = json.get("metadata").unwrap();
-        let name = metadata
-            .get("name")
-            .map(|i| i.as_str().unwrap().to_string())
-            .or_else(|| EntityHelper::extract_yaml_entity_name(spec))
-            .unwrap();
+        let name = Self::kube_entity_name_or_exit(&json, &id);
         let kind = json.get("kind").unwrap().as_str().unwrap().to_string();
         let final_resource: OtoroshExposedResource = exposed_resources
             .resources
@@ -244,12 +250,7 @@ impl ResourcesCommand {
     ) -> () {
         let spec = json.get("spec").unwrap();
         let id = EntityHelper::extract_yaml_entity_id(spec).unwrap();
-        let metadata = json.get("metadata").unwrap();
-        let name = metadata
-            .get("name")
-            .map(|i| i.as_str().unwrap().to_string())
-            .or_else(|| EntityHelper::extract_yaml_entity_name(spec))
-            .unwrap();
+        let name = Self::kube_entity_name_or_exit(&json, &id);
         let kind = json.get("kind").unwrap().as_str().unwrap().to_string();
         let final_resource: OtoroshExposedResource = exposed_resources
             .resources
