@@ -6,11 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.0.20] - 2026-10-23
+
+### Fixed
+- `resources apply` and `resources delete` no longer panic on Kubernetes style entities without `metadata.name`: the
+  name is taken from the spec (`name`, `clientName`, ...), and an entity without any name exits with a clear error
+
+---
+
+## [0.0.19] - 2026-10-21
 
 ### Added
-- `--exclude-path` option for the challenge proxy to forward health check paths (GET/HEAD) to the backend without challenge verification
-- Native support for Clever Cloud `CC_HEALTH_CHECK_PATH` and `CC_HEALTH_CHECK_PATH_<n>` variables in the challenge proxy
 - `CLOUD_APIM_API_URL` to point `otoroshictl` to another Cloud APIM console
 - `OTOROSHICTL_NO_BROWSER` to sign in without opening a browser
 
@@ -28,6 +34,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Security
 - Move to `rustls` 0.23 with `rustls-webpki` 0.103.16 and `webpki-roots` 1.0.10 to distrust the compromised eMudhra intermediate CAs
+
+---
+
+## [0.0.18] - 2026-09-22
+
+### Added
+- `--exclude-path` option for the challenge proxy to forward health check paths (GET/HEAD) to the backend without challenge verification
+- Native support for Clever Cloud `CC_HEALTH_CHECK_PATH` and `CC_HEALTH_CHECK_PATH_<n>` variables in the challenge proxy
 
 ---
 
@@ -185,6 +199,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+[0.0.20]: https://github.com/cloud-apim/otoroshictl/compare/0.0.19...0.0.20
+[0.0.19]: https://github.com/cloud-apim/otoroshictl/compare/0.0.18...0.0.19
+[0.0.18]: https://github.com/cloud-apim/otoroshictl/compare/0.0.17...0.0.18
 [0.0.17]: https://github.com/cloud-apim/otoroshictl/compare/0.0.16...0.0.17
 [0.0.16]: https://github.com/cloud-apim/otoroshictl/compare/0.0.15...0.0.16
 [0.0.15]: https://github.com/cloud-apim/otoroshictl/compare/0.0.14...0.0.15
